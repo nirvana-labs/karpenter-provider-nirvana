@@ -7,4 +7,5 @@ RUN CGO_ENABLED=0 GOOS=linux go build -o /karpenter-provider-nirvana ./cmd/contr
 
 FROM gcr.io/distroless/static:nonroot
 COPY --from=builder /karpenter-provider-nirvana /karpenter-provider-nirvana
+USER non-root
 ENTRYPOINT ["/karpenter-provider-nirvana"]
