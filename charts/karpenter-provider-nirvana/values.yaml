@@ -1,0 +1,26 @@
+replicaCount: 1
+
+image:
+  repository: ghcr.io/nirvana-labs/karpenter-provider-nirvana
+  tag: latest
+  pullPolicy: IfNotPresent
+
+nirvana:
+  clusterID: ""
+  apiKeySecretName: nirvana-api-key
+  apiKeySecretKey: api-key
+  cooldownMultiplier: "2.0"
+  pollInterval: "10s"
+  maxPollDuration: "30m"
+
+serviceAccount:
+  create: true
+  name: karpenter-provider-nirvana
+
+resources:
+  requests:
+    cpu: 100m
+    memory: 128Mi
+  limits:
+    cpu: 500m
+    memory: 256Mi

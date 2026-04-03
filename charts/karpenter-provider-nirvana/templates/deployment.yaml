@@ -1,0 +1,37 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ .Release.Name }}
+  labels:
+    app: karpenter-provider-nirvana
+spec:
+  replicas: {{ .Values.replicaCount }}
+  selector:
+    matchLabels:
+      app: karpenter-provider-nirvana
+  template:
+    metadata:
+      labels:
+        app: karpenter-provider-nirvana
+    spec:
+      serviceAccountName: {{ .Values.serviceAccount.name }}
+      containers:
+        - name: controller
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          env:
+            - name: NIRVANA_CLUSTER_ID
+              value: {{ .Values.nirvana.clusterID | quote }}
+            - name: NIRVANA_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.nirvana.apiKeySecretName }}
+                  key: {{ .Values.nirvana.apiKeySecretKey }}
+            - name: NIRVANA_COOLDOWN_MULTIPLIER
+              value: {{ .Values.nirvana.cooldownMultiplier | quote }}
+            - name: NIRVANA_POLL_INTERVAL
+              value: {{ .Values.nirvana.pollInterval | quote }}
+            - name: NIRVANA_MAX_POLL_DURATION
+              value: {{ .Values.nirvana.maxPollDuration | quote }}
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}

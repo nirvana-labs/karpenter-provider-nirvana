@@ -1,0 +1,6 @@
+apiVersion: v2
+name: karpenter-provider-nirvana
+description: Karpenter cloud provider for Nirvana NKS
+version: 0.1.0
+appVersion: "0.1.0"
+type: application
