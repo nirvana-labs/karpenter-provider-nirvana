@@ -326,9 +326,6 @@ func hydrateNodeClaim(
 		nc.Labels = make(map[string]string)
 	}
 	nc.Labels[corev1.LabelInstanceTypeStable] = InstanceTypeName(pool.NodeConfig)
-	nc.Labels[v1alpha1.LabelPoolID] = pool.ID
-	nc.Labels[v1alpha1.LabelWorkerNodeID] = node.ID
-	nc.Labels[v1alpha1.LabelClusterID] = clusterID
 	nc.Labels[karpv1.CapacityTypeLabelKey] = karpv1.CapacityTypeOnDemand
 
 	nc.Status.Capacity = corev1.ResourceList{
