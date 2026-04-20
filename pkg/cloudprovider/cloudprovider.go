@@ -81,6 +81,11 @@ func (p *CloudProvider) Create(ctx context.Context, nodeClaim *karpv1.NodeClaim)
 
 	newNode, err := p.instanceProvider.ScaleUp(ctx, pool)
 	if err != nil {
+		if nirvanaclient.IsAvailabilityRejection(err) {
+			return nil, cloudprovider.NewInsufficientCapacityError(
+				fmt.Errorf("pool %s rejected scale-up: %w", pool.ID, err),
+			)
+		}
 		return nil, fmt.Errorf("scaling up pool %s: %w", pool.ID, err)
 	}
 

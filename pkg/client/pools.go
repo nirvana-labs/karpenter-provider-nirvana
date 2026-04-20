@@ -47,6 +47,18 @@ func (c *Client) UpdatePool(ctx context.Context, clusterID, poolID string, nodeC
 	return op, nil
 }
 
+// CheckPoolAvailability preflights a scale of pool to nodeCount without mutating state.
+// Returns nil if the target size is provisionable; otherwise the API error.
+func (c *Client) CheckPoolAvailability(ctx context.Context, clusterID, poolID string, nodeCount int) error {
+	err := c.sdk.NKS.Clusters.Pools.Availability.Update(ctx, clusterID, poolID, nks.ClusterPoolAvailabilityUpdateParams{
+		NodeCount: param.NewOpt(int64(nodeCount)),
+	})
+	if err != nil {
+		return fmt.Errorf("pool %s availability check for nodeCount=%d: %w", poolID, nodeCount, err)
+	}
+	return nil
+}
+
 func convertPool(p nks.NKSNodePool) WorkerPool {
 	return WorkerPool{
 		ID:        p.ID,

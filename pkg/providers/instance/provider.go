@@ -102,6 +102,13 @@ func (p *Provider) ScaleUp(ctx context.Context, pool *client.WorkerPool) (*clien
 
 	// Scale up: node_count + 1.
 	newCount := pool.NodeCount + 1
+
+	// Preflight the scale against the availability endpoint before committing.
+	// Runs before RecordScaleStart so a rejected preflight does not incur a cooldown.
+	if err := p.client.CheckPoolAvailability(ctx, p.clusterID, pool.ID, newCount); err != nil {
+		return nil, fmt.Errorf("preflight availability for pool %s: %w", pool.ID, err)
+	}
+
 	p.cooldownManager.RecordScaleStart(pool.ID)
 
 	op, err := p.client.UpdatePool(ctx, p.clusterID, pool.ID, newCount)
@@ -131,7 +138,17 @@ func (p *Provider) ScaleUp(ctx context.Context, pool *client.WorkerPool) (*clien
 
 // DeleteNodeByID deletes a specific worker node from its pool by node ID.
 // This is fire-and-forget: it returns as soon as the API accepts the request.
+// Acquires the per-pool lock so a delete cannot interleave with a scale-up on
+// the same pool, and brackets the call with the cooldown manager so a brief
+// post-delete cooldown dampens delete-then-add thrash driven by consolidation.
 func (p *Provider) DeleteNodeByID(ctx context.Context, poolID, nodeID string) error {
+	mu := p.lockPool(poolID)
+	mu.Lock()
+	defer mu.Unlock()
+
+	p.cooldownManager.RecordScaleStart(poolID)
+	defer p.cooldownManager.RecordScaleComplete(poolID)
+
 	return p.client.DeleteWorkerNode(ctx, p.clusterID, poolID, nodeID)
 }
 

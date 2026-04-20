@@ -16,3 +16,15 @@ func IsNotFound(err error) bool {
 	}
 	return false
 }
+
+// IsAvailabilityRejection reports whether the error represents a client-side
+// rejection (4xx) from the Nirvana API — typically a preflight capacity,
+// quota, or validation failure. Transport errors and 5xx responses return false
+// so callers can treat them as retryable rather than as capacity signals.
+func IsAvailabilityRejection(err error) bool {
+	var apiErr *nks.Error
+	if errors.As(err, &apiErr) {
+		return apiErr.StatusCode >= 400 && apiErr.StatusCode < 500
+	}
+	return false
+}
