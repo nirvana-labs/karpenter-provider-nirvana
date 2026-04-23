@@ -1,0 +1,74 @@
+version: "3"
+
+vars:
+  GO: go
+  GOFLAGS: ""
+  BINARY: karpenter-provider-nirvana
+  LICENSE_IGNORES: >-
+    --ignore=github.com/nirvana-labs
+  GOBIN:
+    sh: |
+      if [ -n "$(go env GOBIN)" ]; then
+        echo "$(go env GOBIN)"
+      else
+        echo "$(go env GOPATH)/bin"
+      fi
+
+tasks:
+  install-lint:
+    desc: Install golangci-lint
+    cmds:
+      - "{{.GO}} install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@8f3b0c7ed018e57905fbd873c697e0b1ede605a5"
+
+  install-license-check:
+    desc: Install license check
+    cmds:
+      - "{{.GO}} install github.com/google/go-licenses/v2@3e084b0caf710f7bfead967567539214f598c0a2"
+
+  install-security-check:
+    desc: Install security check
+    cmds:
+      - "{{.GO}} install github.com/securego/gosec/v2/cmd/gosec@f6760311e8a3db06e3d2d7e9817874dadcd34a25"
+
+  install-gotestsum:
+    desc: Install gotestsum
+    cmds:
+      - "{{.GO}} install gotest.tools/gotestsum@c4a0df2e75a225d979a444342dd3db752b53619f"
+
+  install-tools:
+    desc: Install all tools
+    deps:
+      - install-lint
+      - install-license-check
+      - install-security-check
+      - install-gotestsum
+
+  build:
+    desc: Build the project
+    cmds:
+      - "{{.GO}} build {{.GOFLAGS}} -o bin/{{.BINARY}} ./cmd/controller"
+
+  vet:
+    desc: Vet the project
+    cmds:
+      - "{{.GO}} vet {{.GOFLAGS}} ./..."
+
+  fmt:
+    desc: Format the project
+    cmds:
+      - "{{.GO}} fmt ./..."
+
+  lint:
+    desc: Run golangci-lint
+    cmds:
+      - "{{.GOBIN}}/golangci-lint run"
+
+  license-check:
+    desc: Run license check
+    cmds:
+      - "{{.GOBIN}}/go-licenses check ./... --disallowed_types=forbidden,restricted {{.LICENSE_IGNORES}}"
+
+  security-check:
+    desc: Run security check
+    cmds:
+      - "{{.GOBIN}}/gosec ./..."
