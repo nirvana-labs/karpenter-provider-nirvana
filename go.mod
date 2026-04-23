@@ -1,3 +1,3 @@
-module github.com/nirvanalabs/karpenter-provider-nirvana
+module github.com/nirvana-labs/karpenter-provider-nirvana
 
 go 1.26

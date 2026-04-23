@@ -32,7 +32,7 @@ ARG GIT_SHA=dev
 
 LABEL org.opencontainers.image.title="karpenter-provider-nirvana" \
       org.opencontainers.image.description="Karpenter provider implementation for Nirvana Labs" \
-      org.opencontainers.image.source="https://github.com/nirvanalabs/karpenter-provider-nirvana" \
+      org.opencontainers.image.source="https://github.com/nirvana-labs/karpenter-provider-nirvana" \
       org.opencontainers.image.revision="${GIT_SHA}"
 
 ENV NIRVANA_RELEASE=${GIT_SHA}
