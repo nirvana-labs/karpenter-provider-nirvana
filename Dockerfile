@@ -26,7 +26,7 @@ RUN --mount=type=cache,target=/go/pkg/mod \
         ./cmd/controller
 
 # gcr.io/distroless/static-debian12:nonroot
-FROM gcr.io/distroless/static-debian12:nonroot
+FROM gcr.io/distroless/static-debian12@sha256:a9329520abc449e3b14d5bc3a6ffae065bdde0f02667fa10880c49b35c109fd1
 
 ARG GIT_SHA=dev
 
