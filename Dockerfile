@@ -1,4 +1,10 @@
 # syntax=docker/dockerfile:1.7
+#
+# Multi-stage image used for dev, PR, and snapshot builds (compiles from source).
+# Tagged releases use ./Dockerfile.release, which copies the goreleaser-built
+# binary into distroless. Keep the distroless base digest, labels, and runtime
+# env in sync between the two files.
+
 # golang:1.26.1-alpine3.22
 FROM golang@sha256:595c7847cff97c9a9e76f015083c481d26078f961c9c8dca3923132f51fe12f1 AS builder
 

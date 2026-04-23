@@ -35,6 +35,11 @@ tasks:
     cmds:
       - "{{.GO}} install gotest.tools/gotestsum@c4a0df2e75a225d979a444342dd3db752b53619f"
 
+  install-goreleaser:
+    desc: Install goreleaser
+    cmds:
+      - "{{.GO}} install github.com/goreleaser/goreleaser/v2@fd20dc1995cd5eb3fded997d6613c7f694ab448b"
+
   install-tools:
     desc: Install all tools
     deps:
@@ -42,6 +47,7 @@ tasks:
       - install-license-check
       - install-security-check
       - install-gotestsum
+      - install-goreleaser
 
   build:
     desc: Build the project
@@ -72,3 +78,13 @@ tasks:
     desc: Run security check
     cmds:
       - "{{.GOBIN}}/gosec ./..."
+
+  release:check:
+    desc: Validate .goreleaser.yaml
+    cmds:
+      - "{{.GOBIN}}/goreleaser check"
+
+  release:snapshot:
+    desc: Run goreleaser in snapshot mode (builds artifacts locally, does not push)
+    cmds:
+      - "{{.GOBIN}}/goreleaser release --snapshot --clean --skip=publish"

@@ -1,0 +1,90 @@
+name: Snapshot
+
+on:
+  pull_request:
+    types:
+      - labeled
+      - synchronize
+      - reopened
+
+concurrency:
+  group: snapshot-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE: ghcr.io/${{ github.repository }}
+
+jobs:
+  build:
+    name: Build and Push Preview Image
+    if: >-
+      contains(github.event.pull_request.labels.*.name, 'preview') &&
+      github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: blacksmith-4vcpu-ubuntu-2404
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      packages: write
+      pull-requests: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          fetch-depth: 0
+          ref: ${{ github.event.pull_request.head.sha }}
+
+      - name: Setup Blacksmith Builder
+        uses: useblacksmith/setup-docker-builder@5241b2e9423e8b1fa37ed6050ecb62d0fb9a4e38 # v1.6.0
+
+      - name: Login to GHCR
+        uses: docker/login-action@b45d80f862d83dbcd57f89517bcf500b2ab88fb2 # v4.0.0
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Compute image tags
+        id: tags
+        run: |
+          SHORT_SHA=$(git rev-parse --short=7 HEAD)
+          PR_NUMBER=${{ github.event.pull_request.number }}
+          {
+            echo "version=pr-${PR_NUMBER}-${SHORT_SHA}"
+            echo "pr_tag=pr-${PR_NUMBER}"
+            echo "short_sha=${SHORT_SHA}"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Build and push multi-arch image
+        uses: useblacksmith/build-push-action@cbd1f60d194a98cb3be5523b15134501eaf0fbf3 # v2
+        with:
+          context: .
+          platforms: linux/amd64,linux/arm64
+          push: true
+          build-args: |
+            GIT_SHA=${{ steps.tags.outputs.version }}
+          tags: |
+            ${{ env.IMAGE }}:${{ steps.tags.outputs.version }}
+            ${{ env.IMAGE }}:${{ steps.tags.outputs.pr_tag }}
+          labels: |
+            org.opencontainers.image.revision=${{ github.event.pull_request.head.sha }}
+            org.opencontainers.image.version=${{ steps.tags.outputs.version }}
+
+      - name: Post preview comment
+        uses: marocchino/sticky-pull-request-comment@0ea0beb66eb9baf113663a64ec522f60e49231c0 # v3.0.4
+        with:
+          header: snapshot-image
+          message: |
+            ### Preview image
+
+            Built from `${{ steps.tags.outputs.short_sha }}`.
+
+            ```
+            ${{ env.IMAGE }}:${{ steps.tags.outputs.version }}
+            ${{ env.IMAGE }}:${{ steps.tags.outputs.pr_tag }}
+            ```
+
+            The floating `${{ steps.tags.outputs.pr_tag }}` tag is overwritten on every push — pin to the sha-suffixed tag for reproducible deploys.
