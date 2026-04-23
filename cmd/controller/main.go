@@ -2,4 +2,6 @@ package main
 
 var version string
 
-func main() {}
+func main() {
+	_ = version
+}
