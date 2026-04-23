@@ -1,0 +1,21 @@
+# syntax=docker/dockerfile:1.7
+#
+# Release image assembled by goreleaser's dockers_v2 pipeline. Goreleaser stages
+# each platform's prebuilt binary under $TARGETPLATFORM (e.g. linux/amd64/) in
+# the build context, and buildx assembles a multi-arch manifest in one pass.
+# Keep the base digest and runtime env in sync with ./Dockerfile, which is the
+# multi-stage image used for dev and PR builds.
+
+# gcr.io/distroless/static-debian12:nonroot
+FROM gcr.io/distroless/static-debian12@sha256:a9329520abc449e3b14d5bc3a6ffae065bdde0f02667fa10880c49b35c109fd1
+
+ARG TARGETPLATFORM
+ARG VERSION=dev
+
+ENV NIRVANA_RELEASE=${VERSION}
+
+COPY ${TARGETPLATFORM}/karpenter-provider-nirvana /karpenter-provider-nirvana
+
+USER nonroot:nonroot
+
+ENTRYPOINT ["/karpenter-provider-nirvana"]

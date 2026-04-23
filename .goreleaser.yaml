@@ -1,0 +1,71 @@
+version: 2
+
+project_name: karpenter-provider-nirvana
+
+before:
+  hooks:
+    - go mod tidy
+    - go mod download
+
+builds:
+  - id: controller
+    main: ./cmd/controller
+    binary: karpenter-provider-nirvana
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - linux
+    goarch:
+      - amd64
+      - arm64
+    flags:
+      - -trimpath
+    ldflags:
+      - -s -w -X main.version={{ .Version }}
+    mod_timestamp: "{{ .CommitTimestamp }}"
+
+archives:
+  - id: default
+    formats:
+      - tar.gz
+    name_template: "{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
+    files:
+      - LICENSE
+      - README.md
+
+checksum:
+  name_template: checksums.txt
+  algorithm: sha256
+
+changelog:
+  disable: true
+
+dockers_v2:
+  - id: default
+    ids:
+      - controller
+    dockerfile: Dockerfile.release
+    images:
+      - ghcr.io/nirvana-labs/karpenter-provider-nirvana
+    tags:
+      - "{{ .Version }}"
+      - "{{ if not .Prerelease }}latest{{ end }}"
+    platforms:
+      - linux/amd64
+      - linux/arm64
+    build_args:
+      VERSION: "{{ .Version }}"
+    labels:
+      org.opencontainers.image.title: karpenter-provider-nirvana
+      org.opencontainers.image.description: Karpenter provider implementation for Nirvana Labs
+      org.opencontainers.image.source: https://github.com/nirvana-labs/karpenter-provider-nirvana
+      org.opencontainers.image.revision: "{{ .FullCommit }}"
+      org.opencontainers.image.version: "{{ .Version }}"
+      org.opencontainers.image.created: "{{ .Date }}"
+
+release:
+  mode: keep-existing
+  prerelease: auto
+  github:
+    owner: nirvana-labs
+    name: karpenter-provider-nirvana

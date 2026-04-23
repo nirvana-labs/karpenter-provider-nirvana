@@ -6,6 +6,8 @@
 *.dylib
 # Build output
 bin/
+# goreleaser
+dist/
 # Test binary, built with `go test -c`
 *.test
 # Output of the go coverage tool
