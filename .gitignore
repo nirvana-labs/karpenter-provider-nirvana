@@ -8,6 +8,8 @@
 bin/
 # goreleaser
 dist/
+# buildkit config written by useblacksmith/setup-docker-builder
+buildkitd.toml
 # Test binary, built with `go test -c`
 *.test
 # Output of the go coverage tool
