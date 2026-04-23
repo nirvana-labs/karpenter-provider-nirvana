@@ -1,6 +1,7 @@
 package logger
 
 import (
+	"fmt"
 	"os"
 	"time"
 
@@ -9,18 +10,9 @@ import (
 )
 
 func Init(logLevel string, logJSON bool) error {
-	var level zerolog.Level
-	switch logLevel {
-	case "debug":
-		level = zerolog.DebugLevel
-	case "info":
-		level = zerolog.InfoLevel
-	case "warn":
-		level = zerolog.WarnLevel
-	case "error":
-		level = zerolog.ErrorLevel
-	default:
-		level = zerolog.InfoLevel
+	level, err := zerolog.ParseLevel(logLevel)
+	if err != nil {
+		return fmt.Errorf("invalid log level %q: %w", logLevel, err)
 	}
 
 	zerolog.SetGlobalLevel(level)
