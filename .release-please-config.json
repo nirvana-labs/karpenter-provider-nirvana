@@ -5,6 +5,7 @@
       "release-type": "go",
       "package-name": "karpenter-provider-nirvana",
       "include-v-in-tag": true,
+      "include-component-in-tag": false,
       "bootstrap-sha": "ae958d47c8fd34080108ac8a8306c3f345131406",
       "changelog-sections": [
         { "type": "feat", "section": "Features" },
