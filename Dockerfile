@@ -46,6 +46,6 @@ ENV NIRVANA_RELEASE=${GIT_SHA}
 
 COPY --from=builder /out/karpenter-provider-nirvana /karpenter-provider-nirvana
 
-USER nonroot:nonroot
+USER 65532:65532
 
 ENTRYPOINT ["/karpenter-provider-nirvana"]
