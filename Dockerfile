@@ -21,6 +21,7 @@ RUN --mount=type=cache,target=/go/pkg/mod \
 
 # Keep this list in sync with top-level Go package directories used by the controller.
 COPY cmd ./cmd
+COPY pkg ./pkg
 
 RUN --mount=type=cache,target=/go/pkg/mod \
     --mount=type=cache,target=/root/.cache/go-build \
