@@ -7,7 +7,7 @@ import (
 )
 
 const (
-	Group   = "nirvana.com"
+	Group   = "nirvanalabs.io"
 	Version = "v1alpha1"
 )
 

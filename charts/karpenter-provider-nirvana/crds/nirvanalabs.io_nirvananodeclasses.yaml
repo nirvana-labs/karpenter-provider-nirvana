@@ -1,9 +1,9 @@
 apiVersion: apiextensions.k8s.io/v1
 kind: CustomResourceDefinition
 metadata:
-  name: nirvananodeclasses.nirvana.com
+  name: nirvananodeclasses.nirvanalabs.io
 spec:
-  group: nirvana.com
+  group: nirvanalabs.io
   names:
     kind: NirvanaNodeClass
     listKind: NirvanaNodeClassList
