@@ -24,7 +24,9 @@ func main() {
 
 	ctx, coreOp := coreoperator.NewOperator()
 
-	v1alpha1.AddToScheme(coreOp.GetScheme())
+	if err := v1alpha1.AddToScheme(coreOp.GetScheme()); err != nil {
+		log.Fatal().Err(err).Msg("failed to register NirvanaNodeClass scheme")
+	}
 
 	nirvanaCloudProvider := cloudprovider.New()
 	decoratedCloudProvider := metrics.Decorate(nirvanaCloudProvider)
