@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.4.0](https://github.com/nirvana-labs/karpenter-provider-nirvana/compare/v0.3.0...v0.4.0) (2026-04-29)
+
+
+### Features
+
+* **controller:** add status controller for NirvanaNodeClass ([#16](https://github.com/nirvana-labs/karpenter-provider-nirvana/issues/16)) ([0d0ea43](https://github.com/nirvana-labs/karpenter-provider-nirvana/commit/0d0ea43b9c447f6e834b4a4388ce614271381e00))
+
 ## [0.3.0](https://github.com/nirvana-labs/karpenter-provider-nirvana/compare/v0.2.0...v0.3.0) (2026-04-29)
 
 
