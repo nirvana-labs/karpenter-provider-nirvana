@@ -12,6 +12,7 @@ import (
 
 	"github.com/nirvana-labs/karpenter-provider-nirvana/pkg/apis/v1alpha1"
 	"github.com/nirvana-labs/karpenter-provider-nirvana/pkg/cloudprovider"
+	nodeclasscontroller "github.com/nirvana-labs/karpenter-provider-nirvana/pkg/controllers/nodeclass"
 	"github.com/nirvana-labs/karpenter-provider-nirvana/pkg/logger"
 )
 
@@ -47,6 +48,7 @@ func main() {
 			coreOp.InstanceTypeStore,
 		)...).
 		WithControllers(ctx,
+			nodeclasscontroller.NewController(coreOp.GetClient()),
 			status.NewController[*v1alpha1.NirvanaNodeClass](coreOp.GetClient(), coreOp.Manager.GetEventRecorderFor("nirvana")),
 		).
 		Start(ctx)
