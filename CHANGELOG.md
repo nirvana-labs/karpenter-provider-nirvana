@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.5.0](https://github.com/nirvana-labs/karpenter-provider-nirvana/compare/v0.4.0...v0.5.0) (2026-04-29)
+
+
+### Features
+
+* **nodeclass:** implement controller for NirvanaNodeClass with regis… ([#18](https://github.com/nirvana-labs/karpenter-provider-nirvana/issues/18)) ([eea5fbc](https://github.com/nirvana-labs/karpenter-provider-nirvana/commit/eea5fbca8f173bbb785b50074b92a592f55c3b80))
+
 ## [0.4.0](https://github.com/nirvana-labs/karpenter-provider-nirvana/compare/v0.3.0...v0.4.0) (2026-04-29)
 
 
