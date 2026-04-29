@@ -36,9 +36,10 @@ func (c *Controller) Reconcile(ctx context.Context, req reconcile.Request) (reco
 	if nodeClass.StatusConditions().IsTrue(status.ConditionReady) {
 		return reconcile.Result{}, nil
 	}
+	patch := client.MergeFrom(nodeClass.DeepCopy())
 	nodeClass.StatusConditions().SetTrue(status.ConditionReady)
-	if err := c.kubeClient.Status().Update(ctx, nodeClass); err != nil {
-		return reconcile.Result{}, fmt.Errorf("updating status, %w", err)
+	if err := c.kubeClient.Status().Patch(ctx, nodeClass, patch); err != nil {
+		return reconcile.Result{}, fmt.Errorf("patching status, %w", err)
 	}
 	return reconcile.Result{}, nil
 }
