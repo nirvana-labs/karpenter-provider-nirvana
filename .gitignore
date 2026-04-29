@@ -6,6 +6,7 @@
 *.dylib
 # Build output
 bin/
+controller
 # goreleaser
 dist/
 # buildkit config written by useblacksmith/setup-docker-builder

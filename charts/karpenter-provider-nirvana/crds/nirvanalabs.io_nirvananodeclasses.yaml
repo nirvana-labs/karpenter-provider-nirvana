@@ -1,0 +1,47 @@
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  name: nirvananodeclasses.nirvanalabs.io
+spec:
+  group: nirvanalabs.io
+  names:
+    kind: NirvanaNodeClass
+    listKind: NirvanaNodeClassList
+    plural: nirvananodeclasses
+    singular: nirvananodeclass
+    shortNames:
+      - nnc
+    categories:
+      - karpenter
+  scope: Cluster
+  versions:
+    - name: v1alpha1
+      served: true
+      storage: true
+      subresources:
+        status: {}
+      schema:
+        openAPIV3Schema:
+          type: object
+          properties:
+            spec:
+              type: object
+            status:
+              type: object
+              properties:
+                conditions:
+                  type: array
+                  items:
+                    type: object
+                    properties:
+                      type:
+                        type: string
+                      status:
+                        type: string
+                      reason:
+                        type: string
+                      message:
+                        type: string
+                      lastTransitionTime:
+                        type: string
+                        format: date-time
