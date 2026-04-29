@@ -33,6 +33,9 @@ func (c *Controller) Reconcile(ctx context.Context, req reconcile.Request) (reco
 	if err := c.kubeClient.Get(ctx, req.NamespacedName, nodeClass); err != nil {
 		return reconcile.Result{}, client.IgnoreNotFound(err)
 	}
+	if nodeClass.StatusConditions().IsTrue(status.ConditionReady) {
+		return reconcile.Result{}, nil
+	}
 	nodeClass.StatusConditions().SetTrue(status.ConditionReady)
 	if err := c.kubeClient.Status().Update(ctx, nodeClass); err != nil {
 		return reconcile.Result{}, fmt.Errorf("updating status, %w", err)
