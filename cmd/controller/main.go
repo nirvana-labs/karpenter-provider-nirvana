@@ -3,6 +3,7 @@ package main
 import (
 	"os"
 
+	"github.com/awslabs/operatorpkg/status"
 	"github.com/rs/zerolog/log"
 	"sigs.k8s.io/karpenter/pkg/cloudprovider/metrics"
 	corecontrollers "sigs.k8s.io/karpenter/pkg/controllers"
@@ -45,6 +46,9 @@ func main() {
 			clusterState,
 			coreOp.InstanceTypeStore,
 		)...).
+		WithControllers(ctx,
+			status.NewController[*v1alpha1.NirvanaNodeClass](coreOp.GetClient(), coreOp.Manager.GetEventRecorderFor("nirvana")),
+		).
 		Start(ctx)
 
 	log.Info().Msg("controller started")
