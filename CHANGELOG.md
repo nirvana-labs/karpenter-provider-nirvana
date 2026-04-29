@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.3.0](https://github.com/nirvana-labs/karpenter-provider-nirvana/compare/v0.2.0...v0.3.0) (2026-04-29)
+
+
+### Features
+
+* **init:** basic structure with logging ([#14](https://github.com/nirvana-labs/karpenter-provider-nirvana/issues/14)) ([ecdcc62](https://github.com/nirvana-labs/karpenter-provider-nirvana/commit/ecdcc62eb60fe864e46d93368edc8039fc0c3086))
+
 ## [0.2.0](https://github.com/nirvana-labs/karpenter-provider-nirvana/compare/v0.1.0...v0.2.0) (2026-04-23)
 
 
