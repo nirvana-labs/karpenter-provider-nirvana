@@ -6,6 +6,16 @@ import (
 
 type NirvanaNodeClassStatus struct {
 	Conditions []status.Condition `json:"conditions,omitempty"`
+	Pools      []PoolStatus       `json:"pools,omitempty"`
+}
+
+type PoolStatus struct {
+	ID           string `json:"id"`
+	Name         string `json:"name"`
+	NodeCount    int    `json:"nodeCount"`
+	InstanceType string `json:"instanceType"`
+	StorageGi    int    `json:"storageGi"`
+	Status       string `json:"status"`
 }
 
 func (in *NirvanaNodeClass) StatusConditions() status.ConditionSet {

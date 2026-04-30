@@ -5,15 +5,12 @@ import (
 	"fmt"
 
 	"github.com/awslabs/operatorpkg/status"
-	corev1 "k8s.io/api/core/v1"
-	"k8s.io/apimachinery/pkg/api/resource"
+	"github.com/rs/zerolog/log"
 	karpv1 "sigs.k8s.io/karpenter/pkg/apis/v1"
 	"sigs.k8s.io/karpenter/pkg/cloudprovider"
-	"sigs.k8s.io/karpenter/pkg/scheduling"
 
 	"github.com/nirvana-labs/karpenter-provider-nirvana/pkg/apis/v1alpha1"
-
-	"github.com/rs/zerolog/log"
+	"github.com/nirvana-labs/karpenter-provider-nirvana/pkg/client"
 )
 
 const providerName = "nirvana"
@@ -21,11 +18,17 @@ const providerName = "nirvana"
 var _ cloudprovider.CloudProvider = (*CloudProvider)(nil)
 
 type CloudProvider struct {
-	instanceTypes []*cloudprovider.InstanceType
+	nirvanaClient *client.Client
+	clusterID     string
+	region        string
 }
 
-func New() *CloudProvider {
-	return &CloudProvider{instanceTypes: defaultInstanceTypes()}
+func New(nirvanaClient *client.Client, clusterID, region string) *CloudProvider {
+	return &CloudProvider{
+		nirvanaClient: nirvanaClient,
+		clusterID:     clusterID,
+		region:        region,
+	}
 }
 
 func (p *CloudProvider) Name() string {
@@ -33,11 +36,28 @@ func (p *CloudProvider) Name() string {
 }
 
 func (p *CloudProvider) Create(ctx context.Context, nodeClaim *karpv1.NodeClaim) (*karpv1.NodeClaim, error) {
-	log.Info().Str("nodeclaim", nodeClaim.Name).Msg("create called")
+	pools, err := p.nirvanaClient.ListPools(ctx, p.clusterID)
+	if err != nil {
+		return nil, fmt.Errorf("listing pools: %w", err)
+	}
+
+	pool := selectPool(pools)
+	if pool == nil {
+		return nil, cloudprovider.NewInsufficientCapacityError(fmt.Errorf("no eligible pools available"))
+	}
+
+	log.Info().
+		Str("nodeclaim", nodeClaim.Name).
+		Str("pool_id", pool.ID).
+		Str("pool_name", pool.Name).
+		Str("instance_type", pool.NodeConfig.InstanceType).
+		Int("current_node_count", pool.NodeCount).
+		Int("boot_volume_gb", pool.NodeConfig.BootVolume.Size).
+		Msg("create called — would scale up this pool")
 
 	return &karpv1.NodeClaim{
 		Status: karpv1.NodeClaimStatus{
-			ProviderID:  fmt.Sprintf("nirvana://%s", nodeClaim.Name),
+			ProviderID:  fmt.Sprintf("nirvana://%s/%s/%s", p.clusterID, pool.ID, nodeClaim.Name),
 			Capacity:    nodeClaim.Spec.Resources.Requests,
 			Allocatable: nodeClaim.Spec.Resources.Requests,
 		},
@@ -48,7 +68,7 @@ func (p *CloudProvider) Delete(ctx context.Context, nodeClaim *karpv1.NodeClaim)
 	log.Info().
 		Str("nodeclaim", nodeClaim.Name).
 		Str("provider_id", nodeClaim.Status.ProviderID).
-		Msg("delete called")
+		Msg("delete called — would scale down pool")
 
 	return cloudprovider.NewNodeClaimNotFoundError(fmt.Errorf("instance terminated"))
 }
@@ -62,7 +82,22 @@ func (p *CloudProvider) List(ctx context.Context) ([]*karpv1.NodeClaim, error) {
 }
 
 func (p *CloudProvider) GetInstanceTypes(ctx context.Context, _ *karpv1.NodePool) ([]*cloudprovider.InstanceType, error) {
-	return p.instanceTypes, nil
+	pools, err := p.nirvanaClient.ListPools(ctx, p.clusterID)
+	if err != nil {
+		return nil, fmt.Errorf("listing pools: %w", err)
+	}
+
+	specs, err := p.nirvanaClient.ListInstanceTypes(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("listing instance types: %w", err)
+	}
+
+	specMap := make(map[string]client.InstanceTypeSpec, len(specs))
+	for _, s := range specs {
+		specMap[s.Name] = s
+	}
+
+	return PoolsToInstanceTypes(pools, specMap, p.region), nil
 }
 
 func (p *CloudProvider) IsDrifted(ctx context.Context, nodeClaim *karpv1.NodeClaim) (cloudprovider.DriftReason, error) {
@@ -77,39 +112,11 @@ func (p *CloudProvider) GetSupportedNodeClasses() []status.Object {
 	return []status.Object{&v1alpha1.NirvanaNodeClass{}}
 }
 
-func defaultInstanceTypes() []*cloudprovider.InstanceType {
-	return []*cloudprovider.InstanceType{
-		{
-			Name: "nirvana-4vcpu-16gi-100gi",
-			Requirements: scheduling.NewRequirements(
-				scheduling.NewRequirement(corev1.LabelInstanceTypeStable, corev1.NodeSelectorOpIn, "nirvana-4vcpu-16gi-100gi"),
-				scheduling.NewRequirement(corev1.LabelArchStable, corev1.NodeSelectorOpIn, "amd64"),
-				scheduling.NewRequirement(corev1.LabelOSStable, corev1.NodeSelectorOpIn, "linux"),
-				scheduling.NewRequirement(corev1.LabelTopologyZone, corev1.NodeSelectorOpIn, "us-sea-1"),
-				scheduling.NewRequirement(karpv1.CapacityTypeLabelKey, corev1.NodeSelectorOpIn, karpv1.CapacityTypeOnDemand),
-			),
-			Offerings: cloudprovider.Offerings{
-				&cloudprovider.Offering{
-					Requirements: scheduling.NewRequirements(
-						scheduling.NewRequirement(corev1.LabelTopologyZone, corev1.NodeSelectorOpIn, "us-sea-1"),
-						scheduling.NewRequirement(karpv1.CapacityTypeLabelKey, corev1.NodeSelectorOpIn, karpv1.CapacityTypeOnDemand),
-					),
-					Price:     0,
-					Available: true,
-				},
-			},
-			Capacity: corev1.ResourceList{
-				corev1.ResourceCPU:              resource.MustParse("4"),
-				corev1.ResourceMemory:           resource.MustParse("16Gi"),
-				corev1.ResourceEphemeralStorage: resource.MustParse("100Gi"),
-				corev1.ResourcePods:             resource.MustParse("110"),
-			},
-			Overhead: &cloudprovider.InstanceTypeOverhead{
-				KubeReserved: corev1.ResourceList{
-					corev1.ResourceCPU:    resource.MustParse("100m"),
-					corev1.ResourceMemory: resource.MustParse("256Mi"),
-				},
-			},
-		},
+func selectPool(pools []client.WorkerPool) *client.WorkerPool {
+	for i, pool := range pools {
+		if pool.Status == "ready" {
+			return &pools[i]
+		}
 	}
+	return nil
 }

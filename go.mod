@@ -4,9 +4,11 @@ go 1.26
 
 require (
 	github.com/awslabs/operatorpkg v0.0.0-20251222193911-34e9a1898737
+	github.com/nirvana-labs/nirvana-go v1.77.2
 	github.com/rs/zerolog v1.35.1
 	k8s.io/api v0.35.0
 	k8s.io/apimachinery v0.35.0
+	sigs.k8s.io/controller-runtime v0.22.4
 	sigs.k8s.io/karpenter v1.9.0
 )
 
@@ -56,6 +58,10 @@ require (
 	github.com/samber/lo v1.52.0 // indirect
 	github.com/spf13/cobra v1.10.2 // indirect
 	github.com/spf13/pflag v1.0.10 // indirect
+	github.com/tidwall/gjson v1.18.0 // indirect
+	github.com/tidwall/match v1.1.1 // indirect
+	github.com/tidwall/pretty v1.2.1 // indirect
+	github.com/tidwall/sjson v1.2.5 // indirect
 	github.com/x448/float16 v0.8.4 // indirect
 	go.uber.org/multierr v1.11.0 // indirect
 	go.uber.org/zap v1.27.1 // indirect
@@ -81,7 +87,6 @@ require (
 	k8s.io/klog/v2 v2.130.1 // indirect
 	k8s.io/kube-openapi v0.0.0-20251125145642-4e65d59e963e // indirect
 	k8s.io/utils v0.0.0-20251222233032-718f0e51e6d2 // indirect
-	sigs.k8s.io/controller-runtime v0.22.4 // indirect
 	sigs.k8s.io/json v0.0.0-20250730193827-2d320260d730 // indirect
 	sigs.k8s.io/randfill v1.0.0 // indirect
 	sigs.k8s.io/structured-merge-diff/v6 v6.3.1 // indirect

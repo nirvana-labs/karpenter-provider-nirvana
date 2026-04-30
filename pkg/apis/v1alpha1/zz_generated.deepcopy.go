@@ -80,6 +80,24 @@ func (in *NirvanaNodeClassStatus) DeepCopyInto(out *NirvanaNodeClassStatus) {
 		*out = make([]status.Condition, len(*in))
 		copy(*out, *in)
 	}
+	if in.Pools != nil {
+		in, out := &in.Pools, &out.Pools
+		*out = make([]PoolStatus, len(*in))
+		copy(*out, *in)
+	}
+}
+
+func (in *PoolStatus) DeepCopyInto(out *PoolStatus) {
+	*out = *in
+}
+
+func (in *PoolStatus) DeepCopy() *PoolStatus {
+	if in == nil {
+		return nil
+	}
+	out := new(PoolStatus)
+	in.DeepCopyInto(out)
+	return out
 }
 
 func (in *NirvanaNodeClassStatus) DeepCopy() *NirvanaNodeClassStatus {
