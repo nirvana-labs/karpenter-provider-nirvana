@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.6.0](https://github.com/nirvana-labs/karpenter-provider-nirvana/compare/v0.5.0...v0.6.0) (2026-04-30)
+
+
+### Features
+
+* wire to the nirvana api ([#20](https://github.com/nirvana-labs/karpenter-provider-nirvana/issues/20)) ([2bfb2bd](https://github.com/nirvana-labs/karpenter-provider-nirvana/commit/2bfb2bd14178bd9ba9f5af2d427c2e819a005dc7))
+
 ## [0.5.0](https://github.com/nirvana-labs/karpenter-provider-nirvana/compare/v0.4.0...v0.5.0) (2026-04-29)
 
 
