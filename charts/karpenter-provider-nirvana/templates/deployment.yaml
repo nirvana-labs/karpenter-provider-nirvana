@@ -1,0 +1,31 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: karpenter
+  labels:
+    app: karpenter
+spec:
+  replicas: {{ .Values.replicaCount }}
+  selector:
+    matchLabels:
+      app: karpenter
+  template:
+    metadata:
+      labels:
+        app: karpenter
+    spec:
+      serviceAccountName: {{ .Values.serviceAccount.name }}
+      containers:
+        - name: controller
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          env:
+            - name: NIRVANA_CLUSTER_ID
+              value: {{ .Values.nirvana.clusterID | quote }}
+            - name: NIRVANA_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.nirvana.apiKeySecretName }}
+                  key: {{ .Values.nirvana.apiKeySecretKey }}
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}

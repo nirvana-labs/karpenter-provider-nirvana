@@ -45,3 +45,20 @@ spec:
                       lastTransitionTime:
                         type: string
                         format: date-time
+                pools:
+                  type: array
+                  items:
+                    type: object
+                    properties:
+                      id:
+                        type: string
+                      name:
+                        type: string
+                      nodeCount:
+                        type: integer
+                      instanceType:
+                        type: string
+                      storageGi:
+                        type: integer
+                      status:
+                        type: string
