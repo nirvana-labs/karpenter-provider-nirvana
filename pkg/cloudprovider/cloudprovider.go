@@ -251,18 +251,20 @@ func (p *CloudProvider) GetSupportedNodeClasses() []status.Object {
 	return []status.Object{&v1alpha1.NirvanaNodeClass{}}
 }
 
-var errAllPoolsInCooldown = fmt.Errorf("all candidate pools are in cooldown")
+var errPoolsTemporarilyUnavailable = fmt.Errorf("all candidate pools are temporarily unavailable")
 
 func (p *CloudProvider) selectPoolForCreate(pools []client.WorkerPool, requestedType string) (*client.WorkerPool, error) {
 	candidates := make([]int, 0, len(pools))
+	hasTemporarySkip := false
 
 	for i, pool := range pools {
-		if pool.Status != "ready" {
-			log.Debug().Str("pool_id", pool.ID).Str("status", pool.Status).Msg("create: skipping pool, not ready")
-			continue
-		}
 		if requestedType != "" && pool.NodeConfig.InstanceType != requestedType {
 			log.Debug().Str("pool_id", pool.ID).Str("pool_type", pool.NodeConfig.InstanceType).Str("requested", requestedType).Msg("create: skipping pool, instance type mismatch")
+			continue
+		}
+		if pool.Status != "ready" {
+			log.Debug().Str("pool_id", pool.ID).Str("status", pool.Status).Msg("create: skipping pool, not ready")
+			hasTemporarySkip = true
 			continue
 		}
 		if pool.NodeCount >= maxNodesPerPool {
@@ -273,6 +275,9 @@ func (p *CloudProvider) selectPoolForCreate(pools []client.WorkerPool, requested
 	}
 
 	if len(candidates) == 0 {
+		if hasTemporarySkip {
+			return nil, errPoolsTemporarilyUnavailable
+		}
 		return nil, cloudprovider.NewInsufficientCapacityError(fmt.Errorf("no eligible pools available for instance type %s", requestedType))
 	}
 
@@ -289,7 +294,7 @@ func (p *CloudProvider) selectPoolForCreate(pools []client.WorkerPool, requested
 		log.Warn().Str("pool_id", pool.ID).Dur("remaining", remaining).Msg("create: pool in cooldown, skipping")
 	}
 
-	return nil, errAllPoolsInCooldown
+	return nil, errPoolsTemporarilyUnavailable
 }
 
 func (p *CloudProvider) waitForOperation(ctx context.Context, poolID, operationID, action string) (*operations.Operation, error) {
