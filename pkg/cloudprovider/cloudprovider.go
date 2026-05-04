@@ -3,6 +3,7 @@ package cloudprovider
 import (
 	"context"
 	"fmt"
+	"sort"
 	"strings"
 	"time"
 
@@ -257,15 +258,9 @@ func (p *CloudProvider) selectPoolForCreate(pools []client.WorkerPool, requested
 		candidates = append(candidates, i)
 	}
 
-	// Sort candidates by node count ascending (most room first), then try to reserve.
-	for len(candidates) > 1 {
-		for j := 0; j < len(candidates)-1; j++ {
-			if pools[candidates[j]].NodeCount > pools[candidates[j+1]].NodeCount {
-				candidates[j], candidates[j+1] = candidates[j+1], candidates[j]
-			}
-		}
-		break
-	}
+	sort.Slice(candidates, func(a, b int) bool {
+		return pools[candidates[a]].NodeCount < pools[candidates[b]].NodeCount
+	})
 
 	for _, idx := range candidates {
 		pool := &pools[idx]
