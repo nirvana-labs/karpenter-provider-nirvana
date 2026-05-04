@@ -14,6 +14,8 @@ import (
 	karpv1 "sigs.k8s.io/karpenter/pkg/apis/v1"
 	"sigs.k8s.io/karpenter/pkg/cloudprovider"
 
+	"github.com/nirvana-labs/nirvana-go/operations"
+
 	"github.com/nirvana-labs/karpenter-provider-nirvana/pkg/apis/v1alpha1"
 	"github.com/nirvana-labs/karpenter-provider-nirvana/pkg/client"
 	"github.com/nirvana-labs/karpenter-provider-nirvana/pkg/cooldown"
@@ -65,13 +67,13 @@ func (p *CloudProvider) Create(ctx context.Context, nodeClaim *karpv1.NodeClaim)
 		Str("requested_instance_type", requestedType).
 		Msg("create: fetched pools")
 
-	pool := p.selectPoolForCreate(pools, requestedType)
-	if pool == nil {
-		log.Warn().
+	pool, err := p.selectPoolForCreate(pools, requestedType)
+	if err != nil {
+		log.Warn().Err(err).
 			Str("nodeclaim", nodeClaim.Name).
 			Str("requested_instance_type", requestedType).
 			Msg("create: no eligible pool found")
-		return nil, cloudprovider.NewInsufficientCapacityError(fmt.Errorf("no eligible pools available for instance type %s", requestedType))
+		return nil, err
 	}
 
 	log.Info().
@@ -118,13 +120,20 @@ func (p *CloudProvider) Create(ctx context.Context, nodeClaim *karpv1.NodeClaim)
 		Str("operation_id", operationID).
 		Msg("create: scale-up operation submitted, waiting for completion")
 
-	if err := p.waitForOperation(ctx, pool.ID, operationID, "create"); err != nil {
+	op, err := p.waitForOperation(ctx, pool.ID, operationID, "create")
+	if err != nil {
 		return nil, fmt.Errorf("waiting for scale-up of pool %s: %w", pool.ID, err)
 	}
 
+	nodeID := op.ResourceID
+	log.Info().
+		Str("pool_id", pool.ID).
+		Str("node_id", nodeID).
+		Msg("create: new node identified from operation")
+
 	return &karpv1.NodeClaim{
 		Status: karpv1.NodeClaimStatus{
-			ProviderID:  fmt.Sprintf("nirvana://%s/%s/%s", p.clusterID, pool.ID, nodeClaim.Name),
+			ProviderID:  fmt.Sprintf("nirvana://%s/%s/%s", p.clusterID, pool.ID, nodeID),
 			Capacity:    capacity,
 			Allocatable: capacity,
 		},
@@ -196,7 +205,7 @@ func (p *CloudProvider) Delete(ctx context.Context, nodeClaim *karpv1.NodeClaim)
 		Str("operation_id", operationID).
 		Msg("delete: scale-down operation submitted, waiting for completion")
 
-	if err := p.waitForOperation(ctx, poolID, operationID, "delete"); err != nil {
+	if _, err := p.waitForOperation(ctx, poolID, operationID, "delete"); err != nil {
 		return fmt.Errorf("waiting for scale-down of pool %s: %w", poolID, err)
 	}
 
@@ -242,7 +251,9 @@ func (p *CloudProvider) GetSupportedNodeClasses() []status.Object {
 	return []status.Object{&v1alpha1.NirvanaNodeClass{}}
 }
 
-func (p *CloudProvider) selectPoolForCreate(pools []client.WorkerPool, requestedType string) *client.WorkerPool {
+var errAllPoolsInCooldown = fmt.Errorf("all candidate pools are in cooldown")
+
+func (p *CloudProvider) selectPoolForCreate(pools []client.WorkerPool, requestedType string) (*client.WorkerPool, error) {
 	candidates := make([]int, 0, len(pools))
 
 	for i, pool := range pools {
@@ -261,6 +272,10 @@ func (p *CloudProvider) selectPoolForCreate(pools []client.WorkerPool, requested
 		candidates = append(candidates, i)
 	}
 
+	if len(candidates) == 0 {
+		return nil, cloudprovider.NewInsufficientCapacityError(fmt.Errorf("no eligible pools available for instance type %s", requestedType))
+	}
+
 	sort.Slice(candidates, func(a, b int) bool {
 		return pools[candidates[a]].NodeCount < pools[candidates[b]].NodeCount
 	})
@@ -268,18 +283,18 @@ func (p *CloudProvider) selectPoolForCreate(pools []client.WorkerPool, requested
 	for _, idx := range candidates {
 		pool := &pools[idx]
 		if p.cooldowns.TryReserve(pool.ID) {
-			return pool
+			return pool, nil
 		}
 		remaining := p.cooldowns.GetCooldownRemaining(pool.ID)
 		log.Warn().Str("pool_id", pool.ID).Dur("remaining", remaining).Msg("create: pool in cooldown, skipping")
 	}
 
-	return nil
+	return nil, errAllPoolsInCooldown
 }
 
-func (p *CloudProvider) waitForOperation(ctx context.Context, poolID, operationID, action string) error {
+func (p *CloudProvider) waitForOperation(ctx context.Context, poolID, operationID, action string) (*operations.Operation, error) {
 	start := time.Now()
-	err := p.nirvanaClient.WaitForOperation(ctx, operationID)
+	op, err := p.nirvanaClient.WaitForOperation(ctx, operationID)
 	duration := time.Since(start)
 
 	p.cooldowns.RecordScaleComplete(poolID)
@@ -292,7 +307,7 @@ func (p *CloudProvider) waitForOperation(ctx context.Context, poolID, operationI
 			Str("action", action).
 			Dur("duration", duration).
 			Msgf("%s: vm operation failed", action)
-		return err
+		return nil, err
 	}
 
 	log.Info().
@@ -301,7 +316,7 @@ func (p *CloudProvider) waitForOperation(ctx context.Context, poolID, operationI
 		Str("action", action).
 		Dur("duration", duration).
 		Msgf("%s: vm operation complete", action)
-	return nil
+	return op, nil
 }
 
 func instanceTypeFromRequirements(nodeClaim *karpv1.NodeClaim) string {
