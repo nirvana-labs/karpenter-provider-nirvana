@@ -108,7 +108,6 @@ func (p *CloudProvider) Create(ctx context.Context, nodeClaim *karpv1.NodeClaim)
 		Str("operation_id", operationID).
 		Msg("create: scale-up operation submitted")
 
-	p.cooldowns.RecordScaleStart(pool.ID)
 	p.trackOperation(ctx, pool.ID, operationID, "create")
 
 	return &karpv1.NodeClaim{
@@ -228,7 +227,7 @@ func (p *CloudProvider) GetSupportedNodeClasses() []status.Object {
 }
 
 func (p *CloudProvider) selectPoolForCreate(pools []client.WorkerPool, requestedType string) *client.WorkerPool {
-	var best *client.WorkerPool
+	candidates := make([]int, 0, len(pools))
 
 	for i, pool := range pools {
 		if pool.Status != "ready" {
@@ -243,17 +242,29 @@ func (p *CloudProvider) selectPoolForCreate(pools []client.WorkerPool, requested
 			log.Warn().Str("pool_id", pool.ID).Str("pool_name", pool.Name).Int("current_count", pool.NodeCount).Int("max", maxNodesPerPool).Msg("create: pool at max capacity, skipping")
 			continue
 		}
-		if p.cooldowns.IsInCooldown(pool.ID) {
-			remaining := p.cooldowns.GetCooldownRemaining(pool.ID)
-			log.Warn().Str("pool_id", pool.ID).Dur("remaining", remaining).Msg("create: pool in cooldown, skipping")
-			continue
-		}
-		if best == nil || pool.NodeCount < best.NodeCount {
-			best = &pools[i]
-		}
+		candidates = append(candidates, i)
 	}
 
-	return best
+	// Sort candidates by node count ascending (most room first), then try to reserve.
+	for len(candidates) > 1 {
+		for j := 0; j < len(candidates)-1; j++ {
+			if pools[candidates[j]].NodeCount > pools[candidates[j+1]].NodeCount {
+				candidates[j], candidates[j+1] = candidates[j+1], candidates[j]
+			}
+		}
+		break
+	}
+
+	for _, idx := range candidates {
+		pool := &pools[idx]
+		if p.cooldowns.TryReserve(pool.ID) {
+			return pool
+		}
+		remaining := p.cooldowns.GetCooldownRemaining(pool.ID)
+		log.Warn().Str("pool_id", pool.ID).Dur("remaining", remaining).Msg("create: pool in cooldown, skipping")
+	}
+
+	return nil
 }
 
 func (p *CloudProvider) trackOperation(ctx context.Context, poolID, operationID, action string) {

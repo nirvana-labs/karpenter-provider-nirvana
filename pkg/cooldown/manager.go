@@ -59,7 +59,23 @@ func (m *Manager) RecordScaleComplete(poolID string) {
 func (m *Manager) IsInCooldown(poolID string) bool {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
+	return m.isInCooldownLocked(poolID)
+}
 
+// TryReserve atomically checks whether poolID is available and, if so,
+// records a scale start. Returns true if the reservation succeeded.
+func (m *Manager) TryReserve(poolID string) bool {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	if m.isInCooldownLocked(poolID) {
+		return false
+	}
+	m.scaleStarts[poolID] = time.Now()
+	return true
+}
+
+func (m *Manager) isInCooldownLocked(poolID string) bool {
 	if _, active := m.scaleStarts[poolID]; active {
 		return true
 	}
