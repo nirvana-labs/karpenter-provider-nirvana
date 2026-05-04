@@ -91,6 +91,12 @@ func (p *CloudProvider) Create(ctx context.Context, nodeClaim *karpv1.NodeClaim)
 
 	targetCount := pool.NodeCount + 1
 
+	if err := p.nirvanaClient.CheckPoolUpdateAvailability(ctx, p.clusterID, pool.ID, targetCount); err != nil {
+		p.cooldowns.ClearCooldown(pool.ID)
+		log.Warn().Err(err).Str("pool_id", pool.ID).Int("target_count", targetCount).Msg("create: no availability for scale-up")
+		return nil, cloudprovider.NewInsufficientCapacityError(fmt.Errorf("no availability for pool %s: %w", pool.ID, err))
+	}
+
 	log.Info().
 		Str("pool_id", pool.ID).
 		Str("pool_name", pool.Name).
@@ -100,6 +106,7 @@ func (p *CloudProvider) Create(ctx context.Context, nodeClaim *karpv1.NodeClaim)
 
 	operationID, err := p.nirvanaClient.UpdatePool(ctx, p.clusterID, pool.ID, targetCount)
 	if err != nil {
+		p.cooldowns.ClearCooldown(pool.ID)
 		return nil, fmt.Errorf("scaling pool %s: %w", pool.ID, err)
 	}
 
@@ -163,6 +170,11 @@ func (p *CloudProvider) Delete(ctx context.Context, nodeClaim *karpv1.NodeClaim)
 	}
 
 	targetCount := pool.NodeCount - 1
+
+	if err := p.nirvanaClient.CheckPoolUpdateAvailability(ctx, p.clusterID, poolID, targetCount); err != nil {
+		log.Warn().Err(err).Str("pool_id", poolID).Int("target_count", targetCount).Msg("delete: no availability for scale-down")
+		return fmt.Errorf("no availability for pool %s: %w", poolID, err)
+	}
 
 	log.Info().
 		Str("pool_id", pool.ID).

@@ -33,6 +33,16 @@ func (c *Client) GetPool(ctx context.Context, clusterID, poolID string) (*Worker
 	return &pool, nil
 }
 
+func (c *Client) CheckPoolUpdateAvailability(ctx context.Context, clusterID, poolID string, newNodeCount int) error {
+	err := c.sdk.NKS.Clusters.Pools.Availability.Update(ctx, clusterID, poolID, nks.ClusterPoolAvailabilityUpdateParams{
+		NodeCount: nirvana.Int(int64(newNodeCount)),
+	})
+	if err != nil {
+		return fmt.Errorf("pool %s availability check failed for node count %d: %w", poolID, newNodeCount, err)
+	}
+	return nil
+}
+
 func (c *Client) UpdatePool(ctx context.Context, clusterID, poolID string, newNodeCount int) (string, error) {
 	log.Info().
 		Str("cluster_id", clusterID).
