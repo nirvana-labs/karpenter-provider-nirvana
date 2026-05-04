@@ -124,7 +124,7 @@ func (p *CloudProvider) Create(ctx context.Context, nodeClaim *karpv1.NodeClaim)
 		return nil, fmt.Errorf("waiting for scale-up of pool %s: %w", pool.ID, err)
 	}
 
-	newNode, err := p.latestNode(ctx, pool.ID)
+	newNode, err := p.latestNode(ctx, pool.ID, targetCount)
 	if err != nil {
 		return nil, fmt.Errorf("finding new node in pool %s: %w", pool.ID, err)
 	}
@@ -301,7 +301,7 @@ func (p *CloudProvider) selectPoolForCreate(pools []client.WorkerPool, requested
 	return nil, errPoolsTemporarilyUnavailable
 }
 
-func (p *CloudProvider) latestNode(ctx context.Context, poolID string) (*client.WorkerNode, error) {
+func (p *CloudProvider) latestNode(ctx context.Context, poolID string, expectedCount int) (*client.WorkerNode, error) {
 	var lastErr error
 	for attempt := 0; attempt < 3; attempt++ {
 		if attempt > 0 {
@@ -317,8 +317,9 @@ func (p *CloudProvider) latestNode(ctx context.Context, poolID string) (*client.
 			log.Warn().Err(err).Int("attempt", attempt+1).Str("pool_id", poolID).Msg("create: retrying node list")
 			continue
 		}
-		if len(nodes) == 0 {
-			lastErr = fmt.Errorf("no nodes found in pool")
+		if len(nodes) < expectedCount {
+			lastErr = fmt.Errorf("expected %d nodes, got %d", expectedCount, len(nodes))
+			log.Warn().Int("attempt", attempt+1).Int("expected", expectedCount).Int("got", len(nodes)).Str("pool_id", poolID).Msg("create: new node not yet visible, retrying")
 			continue
 		}
 
