@@ -150,28 +150,9 @@ func (p *CloudProvider) Delete(ctx context.Context, nodeClaim *karpv1.NodeClaim)
 		Str("provider_id", nodeClaim.Status.ProviderID).
 		Msg("delete: received nodeclaim")
 
-	_, poolID, _, err := parseProviderID(nodeClaim.Status.ProviderID)
+	_, poolID, nodeID, err := parseProviderID(nodeClaim.Status.ProviderID)
 	if err != nil {
 		return cloudprovider.NewNodeClaimNotFoundError(fmt.Errorf("invalid provider id: %w", err))
-	}
-
-	pool, err := p.nirvanaClient.GetPool(ctx, p.clusterID, poolID)
-	if err != nil {
-		if client.IsNotFound(err) {
-			log.Warn().Str("pool_id", poolID).Msg("delete: pool not found")
-			return cloudprovider.NewNodeClaimNotFoundError(fmt.Errorf("pool %s not found", poolID))
-		}
-		return fmt.Errorf("getting pool %s: %w", poolID, err)
-	}
-
-	if pool.NodeCount <= minNodesPerPool {
-		log.Warn().
-			Str("pool_id", poolID).
-			Str("pool_name", pool.Name).
-			Int("current_count", pool.NodeCount).
-			Int("min", minNodesPerPool).
-			Msg("delete: pool at min capacity")
-		return cloudprovider.NewNodeClaimNotFoundError(fmt.Errorf("pool %s at minimum capacity", poolID))
 	}
 
 	if !p.cooldowns.TryReserve(poolID) {
@@ -183,34 +164,28 @@ func (p *CloudProvider) Delete(ctx context.Context, nodeClaim *karpv1.NodeClaim)
 		return fmt.Errorf("pool %s in cooldown for %s", poolID, remaining)
 	}
 
-	targetCount := pool.NodeCount - 1
-
-	if err := p.nirvanaClient.CheckPoolUpdateAvailability(ctx, p.clusterID, poolID, targetCount); err != nil {
-		p.cooldowns.ClearCooldown(poolID)
-		log.Warn().Err(err).Str("pool_id", poolID).Int("target_count", targetCount).Msg("delete: no availability for scale-down")
-		return fmt.Errorf("no availability for pool %s: %w", poolID, err)
-	}
-
 	log.Info().
-		Str("pool_id", pool.ID).
-		Str("pool_name", pool.Name).
-		Int("current_count", pool.NodeCount).
-		Int("target_count", targetCount).
+		Str("pool_id", poolID).
+		Str("node_id", nodeID).
 		Msg("now deleting vm")
 
-	operationID, err := p.nirvanaClient.UpdatePool(ctx, p.clusterID, poolID, targetCount)
+	operationID, err := p.nirvanaClient.DeleteWorkerNode(ctx, p.clusterID, poolID, nodeID)
 	if err != nil {
 		p.cooldowns.ClearCooldown(poolID)
-		return fmt.Errorf("scaling down pool %s: %w", poolID, err)
+		if client.IsNotFound(err) {
+			return cloudprovider.NewNodeClaimNotFoundError(fmt.Errorf("node %s not found: %w", nodeID, err))
+		}
+		return fmt.Errorf("deleting node %s from pool %s: %w", nodeID, poolID, err)
 	}
 
 	log.Info().
 		Str("pool_id", poolID).
+		Str("node_id", nodeID).
 		Str("operation_id", operationID).
-		Msg("delete: scale-down operation submitted, waiting for completion")
+		Msg("delete: node deletion submitted, waiting for completion")
 
 	if _, err := p.waitForOperation(ctx, poolID, operationID, "delete"); err != nil {
-		return fmt.Errorf("waiting for scale-down of pool %s: %w", poolID, err)
+		return fmt.Errorf("waiting for deletion of node %s: %w", nodeID, err)
 	}
 
 	return nil
