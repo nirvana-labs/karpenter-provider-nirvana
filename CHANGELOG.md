@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.7.1](https://github.com/nirvana-labs/karpenter-provider-nirvana/compare/v0.7.0...v0.7.1) (2026-05-04)
+
+
+### Bug Fixes
+
+* id mapping for new nodes ([#24](https://github.com/nirvana-labs/karpenter-provider-nirvana/issues/24)) ([aba4cad](https://github.com/nirvana-labs/karpenter-provider-nirvana/commit/aba4cad4058bc28c39889d8f82093ff3a5f90419))
+
 ## [0.7.0](https://github.com/nirvana-labs/karpenter-provider-nirvana/compare/v0.6.0...v0.7.0) (2026-05-04)
 
 
