@@ -4,8 +4,8 @@ import (
 	"context"
 	"fmt"
 
+	nirvana "github.com/nirvana-labs/nirvana-go"
 	"github.com/nirvana-labs/nirvana-go/nks"
-	"github.com/nirvana-labs/nirvana-go/packages/param"
 	"github.com/rs/zerolog/log"
 )
 
@@ -41,7 +41,7 @@ func (c *Client) UpdatePool(ctx context.Context, clusterID, poolID string, newNo
 		Msg("updating pool node count")
 
 	op, err := c.sdk.NKS.Clusters.Pools.Update(ctx, clusterID, poolID, nks.ClusterPoolUpdateParams{
-		NodeCount: param.Opt[int64]{Value: int64(newNodeCount)},
+		NodeCount: nirvana.Int(int64(newNodeCount)),
 	})
 	if err != nil {
 		return "", fmt.Errorf("updating pool %s node count to %d: %w", poolID, newNodeCount, err)
