@@ -8,6 +8,8 @@ import (
 	"github.com/rs/zerolog/log"
 )
 
+const maxCooldown = 6 * time.Minute
+
 // Manager tracks pool scaling durations and enforces cooldown periods.
 // After a pool finishes scaling, a cooldown of multiplier × provisioning
 // duration is applied before that pool can be scaled again.
@@ -50,7 +52,11 @@ func (m *Manager) RecordScaleComplete(poolID string) {
 	}
 
 	elapsed := time.Since(start)
-	m.cooldowns[poolID] = time.Now().Add(time.Duration(float64(elapsed) * m.multiplier))
+	cd := time.Duration(float64(elapsed) * m.multiplier)
+	if cd > maxCooldown {
+		cd = maxCooldown
+	}
+	m.cooldowns[poolID] = time.Now().Add(cd)
 	delete(m.scaleStarts, poolID)
 }
 
