@@ -80,6 +80,12 @@ func (p *CloudProvider) Create(ctx context.Context, nodeClaim *karpv1.NodeClaim)
 		Int("current_count", pool.NodeCount).
 		Msg("create: selected pool")
 
+	specs, err := p.nirvanaClient.ListInstanceTypes(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("listing instance types: %w", err)
+	}
+	capacity := capacityFromSpec(pool.NodeConfig.InstanceType, specs, pool.NodeConfig.BootVolume.Size)
+
 	targetCount := pool.NodeCount + 1
 
 	log.Info().
@@ -101,12 +107,6 @@ func (p *CloudProvider) Create(ctx context.Context, nodeClaim *karpv1.NodeClaim)
 
 	p.cooldowns.RecordScaleStart(pool.ID)
 	p.trackOperation(ctx, pool.ID, operationID, "create")
-
-	specs, err := p.nirvanaClient.ListInstanceTypes(ctx)
-	if err != nil {
-		return nil, fmt.Errorf("listing instance types: %w", err)
-	}
-	capacity := capacityFromSpec(pool.NodeConfig.InstanceType, specs, pool.NodeConfig.BootVolume.Size)
 
 	return &karpv1.NodeClaim{
 		Status: karpv1.NodeClaimStatus{
