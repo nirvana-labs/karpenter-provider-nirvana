@@ -305,7 +305,11 @@ func (p *CloudProvider) latestNode(ctx context.Context, poolID string) (*client.
 	var lastErr error
 	for attempt := 0; attempt < 3; attempt++ {
 		if attempt > 0 {
-			time.Sleep(2 * time.Second)
+			select {
+			case <-ctx.Done():
+				return nil, ctx.Err()
+			case <-time.After(2 * time.Second):
+			}
 		}
 		nodes, err := p.nirvanaClient.ListWorkerNodes(ctx, p.clusterID, poolID)
 		if err != nil {
