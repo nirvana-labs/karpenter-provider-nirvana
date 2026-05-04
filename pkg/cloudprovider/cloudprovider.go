@@ -142,10 +142,6 @@ func (p *CloudProvider) Delete(ctx context.Context, nodeClaim *karpv1.NodeClaim)
 		return cloudprovider.NewNodeClaimNotFoundError(fmt.Errorf("invalid provider id: %w", err))
 	}
 
-	log.Info().
-		Str("pool_id", poolID).
-		Msg("delete: parsed provider id")
-
 	pool, err := p.nirvanaClient.GetPool(ctx, p.clusterID, poolID)
 	if err != nil {
 		if client.IsNotFound(err) {
