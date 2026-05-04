@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.7.0](https://github.com/nirvana-labs/karpenter-provider-nirvana/compare/v0.6.0...v0.7.0) (2026-05-04)
+
+
+### Features
+
+* enable full functionality ([#22](https://github.com/nirvana-labs/karpenter-provider-nirvana/issues/22)) ([487d6aa](https://github.com/nirvana-labs/karpenter-provider-nirvana/commit/487d6aa8a6306ac9fd371525790cc705010f9c33))
+
 ## [0.6.0](https://github.com/nirvana-labs/karpenter-provider-nirvana/compare/v0.5.0...v0.6.0) (2026-04-30)
 
 
