@@ -116,9 +116,11 @@ func (p *CloudProvider) Create(ctx context.Context, nodeClaim *karpv1.NodeClaim)
 	log.Info().
 		Str("pool_id", pool.ID).
 		Str("operation_id", operationID).
-		Msg("create: scale-up operation submitted")
+		Msg("create: scale-up operation submitted, waiting for completion")
 
-	p.trackOperation(ctx, pool.ID, operationID, "create")
+	if err := p.waitForOperation(ctx, pool.ID, operationID, "create"); err != nil {
+		return nil, fmt.Errorf("waiting for scale-up of pool %s: %w", pool.ID, err)
+	}
 
 	return &karpv1.NodeClaim{
 		Status: karpv1.NodeClaimStatus{
@@ -196,9 +198,11 @@ func (p *CloudProvider) Delete(ctx context.Context, nodeClaim *karpv1.NodeClaim)
 	log.Info().
 		Str("pool_id", poolID).
 		Str("operation_id", operationID).
-		Msg("delete: scale-down operation submitted")
+		Msg("delete: scale-down operation submitted, waiting for completion")
 
-	p.trackOperation(ctx, poolID, operationID, "delete")
+	if err := p.waitForOperation(ctx, poolID, operationID, "delete"); err != nil {
+		return fmt.Errorf("waiting for scale-down of pool %s: %w", poolID, err)
+	}
 
 	return nil
 }
@@ -277,35 +281,31 @@ func (p *CloudProvider) selectPoolForCreate(pools []client.WorkerPool, requested
 	return nil
 }
 
-func (p *CloudProvider) trackOperation(ctx context.Context, poolID, operationID, action string) {
-	go func() {
-		opCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 15*time.Minute)
-		defer cancel()
+func (p *CloudProvider) waitForOperation(ctx context.Context, poolID, operationID, action string) error {
+	start := time.Now()
+	err := p.nirvanaClient.WaitForOperation(ctx, operationID)
+	duration := time.Since(start)
 
-		start := time.Now()
-		err := p.nirvanaClient.WaitForOperation(opCtx, operationID)
-		duration := time.Since(start)
+	p.cooldowns.RecordScaleComplete(poolID)
 
-		p.cooldowns.RecordScaleComplete(poolID)
-
-		if err != nil {
-			log.Error().
-				Err(err).
-				Str("pool_id", poolID).
-				Str("operation_id", operationID).
-				Str("action", action).
-				Dur("duration", duration).
-				Msgf("%s: vm operation failed", action)
-			return
-		}
-
-		log.Info().
+	if err != nil {
+		log.Error().
+			Err(err).
 			Str("pool_id", poolID).
 			Str("operation_id", operationID).
 			Str("action", action).
 			Dur("duration", duration).
-			Msgf("%s: vm operation complete", action)
-	}()
+			Msgf("%s: vm operation failed", action)
+		return err
+	}
+
+	log.Info().
+		Str("pool_id", poolID).
+		Str("operation_id", operationID).
+		Str("action", action).
+		Dur("duration", duration).
+		Msgf("%s: vm operation complete", action)
+	return nil
 }
 
 func instanceTypeFromRequirements(nodeClaim *karpv1.NodeClaim) string {
