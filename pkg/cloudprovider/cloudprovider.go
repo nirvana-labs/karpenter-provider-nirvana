@@ -100,11 +100,18 @@ func (p *CloudProvider) Create(ctx context.Context, nodeClaim *karpv1.NodeClaim)
 		return nil, cloudprovider.NewInsufficientCapacityError(fmt.Errorf("no availability for pool %s: %w", pool.ID, err))
 	}
 
+	existingNodes, err := p.nirvanaClient.ListWorkerNodes(ctx, p.clusterID, pool.ID)
+	if err != nil {
+		p.cooldowns.ClearCooldown(pool.ID)
+		return nil, fmt.Errorf("listing existing nodes for pool %s: %w", pool.ID, err)
+	}
+
 	log.Info().
 		Str("pool_id", pool.ID).
 		Str("pool_name", pool.Name).
 		Int("current_count", pool.NodeCount).
 		Int("target_count", targetCount).
+		Int("existing_nodes", len(existingNodes)).
 		Msg("now creating vm")
 
 	operationID, err := p.nirvanaClient.UpdatePool(ctx, p.clusterID, pool.ID, targetCount)
@@ -122,9 +129,20 @@ func (p *CloudProvider) Create(ctx context.Context, nodeClaim *karpv1.NodeClaim)
 		return nil, fmt.Errorf("waiting for scale-up of pool %s: %w", pool.ID, err)
 	}
 
+	newNode, err := p.identifyNewNode(ctx, pool.ID, existingNodes)
+	if err != nil {
+		return nil, fmt.Errorf("identifying new node in pool %s: %w", pool.ID, err)
+	}
+
+	log.Info().
+		Str("pool_id", pool.ID).
+		Str("new_node_id", newNode.ID).
+		Str("new_node_name", newNode.Name).
+		Msg("create: identified new node")
+
 	return &karpv1.NodeClaim{
 		Status: karpv1.NodeClaimStatus{
-			ProviderID:  fmt.Sprintf("nirvana://%s/%s/%s", p.clusterID, pool.ID, nodeClaim.Name),
+			ProviderID:  fmt.Sprintf("nirvana://%s/%s/%s", p.clusterID, pool.ID, newNode.ID),
 			Capacity:    capacity,
 			Allocatable: capacity,
 		},
@@ -275,6 +293,26 @@ func (p *CloudProvider) selectPoolForCreate(pools []client.WorkerPool, requested
 	}
 
 	return nil
+}
+
+func (p *CloudProvider) identifyNewNode(ctx context.Context, poolID string, before []client.WorkerNode) (*client.WorkerNode, error) {
+	after, err := p.nirvanaClient.ListWorkerNodes(ctx, p.clusterID, poolID)
+	if err != nil {
+		return nil, fmt.Errorf("listing nodes after scale-up: %w", err)
+	}
+
+	existing := make(map[string]struct{}, len(before))
+	for _, n := range before {
+		existing[n.ID] = struct{}{}
+	}
+
+	for i, n := range after {
+		if _, ok := existing[n.ID]; !ok {
+			return &after[i], nil
+		}
+	}
+
+	return nil, fmt.Errorf("no new node found: had %d nodes before, %d after", len(before), len(after))
 }
 
 func (p *CloudProvider) waitForOperation(ctx context.Context, poolID, operationID, action string) error {
