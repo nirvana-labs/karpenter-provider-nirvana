@@ -5,6 +5,8 @@ import (
 	"fmt"
 
 	"github.com/nirvana-labs/nirvana-go/nks"
+	"github.com/nirvana-labs/nirvana-go/packages/param"
+	"github.com/rs/zerolog/log"
 )
 
 func (c *Client) ListPools(ctx context.Context, clusterID string) ([]WorkerPool, error) {
@@ -29,6 +31,22 @@ func (c *Client) GetPool(ctx context.Context, clusterID, poolID string) (*Worker
 
 	pool := convertPool(*sdkPool)
 	return &pool, nil
+}
+
+func (c *Client) UpdatePool(ctx context.Context, clusterID, poolID string, newNodeCount int) (string, error) {
+	log.Info().
+		Str("cluster_id", clusterID).
+		Str("pool_id", poolID).
+		Int("new_count", newNodeCount).
+		Msg("updating pool node count")
+
+	op, err := c.sdk.NKS.Clusters.Pools.Update(ctx, clusterID, poolID, nks.ClusterPoolUpdateParams{
+		NodeCount: param.Opt[int64]{Value: int64(newNodeCount)},
+	})
+	if err != nil {
+		return "", fmt.Errorf("updating pool %s node count to %d: %w", poolID, newNodeCount, err)
+	}
+	return op.ID, nil
 }
 
 func convertPool(p nks.NKSNodePool) WorkerPool {

@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"os"
+	"time"
 
 	"github.com/awslabs/operatorpkg/status"
 	"github.com/rs/zerolog/log"
@@ -15,6 +16,7 @@ import (
 	nirvanaclient "github.com/nirvana-labs/karpenter-provider-nirvana/pkg/client"
 	"github.com/nirvana-labs/karpenter-provider-nirvana/pkg/cloudprovider"
 	nodeclasscontroller "github.com/nirvana-labs/karpenter-provider-nirvana/pkg/controllers/nodeclass"
+	"github.com/nirvana-labs/karpenter-provider-nirvana/pkg/cooldown"
 	"github.com/nirvana-labs/karpenter-provider-nirvana/pkg/logger"
 )
 
@@ -50,13 +52,17 @@ func main() {
 		Str("region", region).
 		Msg("connected to Nirvana cluster")
 
+	cooldownManager := cooldown.NewManager(2.5)
+
 	ctx, coreOp := coreoperator.NewOperator()
+
+	cooldownManager.StartCleanup(ctx, 5*time.Minute)
 
 	if err := v1alpha1.AddToScheme(coreOp.GetScheme()); err != nil {
 		log.Fatal().Err(err).Msg("failed to register NirvanaNodeClass scheme")
 	}
 
-	nirvanaCloudProvider := cloudprovider.New(nirvanaClient, clusterID, region)
+	nirvanaCloudProvider := cloudprovider.New(nirvanaClient, clusterID, region, cooldownManager)
 	decoratedCloudProvider := metrics.Decorate(nirvanaCloudProvider)
 
 	clusterState := state.NewCluster(coreOp.Clock, coreOp.GetClient(), decoratedCloudProvider)
