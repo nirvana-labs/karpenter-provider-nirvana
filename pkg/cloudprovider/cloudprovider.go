@@ -83,10 +83,12 @@ func (p *CloudProvider) Create(ctx context.Context, nodeClaim *karpv1.NodeClaim)
 
 	specs, err := p.nirvanaClient.ListInstanceTypes(ctx)
 	if err != nil {
+		p.cooldowns.ClearCooldown(pool.ID)
 		return nil, fmt.Errorf("listing instance types: %w", err)
 	}
 	capacity, err := capacityFromSpec(pool.NodeConfig.InstanceType, specs, pool.NodeConfig.BootVolume.Size)
 	if err != nil {
+		p.cooldowns.ClearCooldown(pool.ID)
 		return nil, fmt.Errorf("resolving capacity for pool %s: %w", pool.ID, err)
 	}
 
