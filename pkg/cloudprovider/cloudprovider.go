@@ -84,7 +84,10 @@ func (p *CloudProvider) Create(ctx context.Context, nodeClaim *karpv1.NodeClaim)
 	if err != nil {
 		return nil, fmt.Errorf("listing instance types: %w", err)
 	}
-	capacity := capacityFromSpec(pool.NodeConfig.InstanceType, specs, pool.NodeConfig.BootVolume.Size)
+	capacity, err := capacityFromSpec(pool.NodeConfig.InstanceType, specs, pool.NodeConfig.BootVolume.Size)
+	if err != nil {
+		return nil, fmt.Errorf("resolving capacity for pool %s: %w", pool.ID, err)
+	}
 
 	targetCount := pool.NodeCount + 1
 
@@ -302,7 +305,7 @@ func parseProviderID(providerID string) (clusterID, poolID, nodeClaimName string
 	return parts[0], parts[1], parts[2], nil
 }
 
-func capacityFromSpec(instanceType string, specs []client.InstanceTypeSpec, bootVolumeGB int) corev1.ResourceList {
+func capacityFromSpec(instanceType string, specs []client.InstanceTypeSpec, bootVolumeGB int) (corev1.ResourceList, error) {
 	for _, s := range specs {
 		if s.Name == instanceType {
 			return corev1.ResourceList{
@@ -310,8 +313,8 @@ func capacityFromSpec(instanceType string, specs []client.InstanceTypeSpec, boot
 				corev1.ResourceMemory:           resource.MustParse(fmt.Sprintf("%dGi", s.MemoryGB)),
 				corev1.ResourceEphemeralStorage: resource.MustParse(fmt.Sprintf("%dGi", bootVolumeGB)),
 				corev1.ResourcePods:             resource.MustParse("110"),
-			}
+			}, nil
 		}
 	}
-	return corev1.ResourceList{}
+	return nil, fmt.Errorf("instance type %s not found in specs", instanceType)
 }
