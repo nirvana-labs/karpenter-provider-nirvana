@@ -120,20 +120,24 @@ func (p *CloudProvider) Create(ctx context.Context, nodeClaim *karpv1.NodeClaim)
 		Str("operation_id", operationID).
 		Msg("create: scale-up operation submitted, waiting for completion")
 
-	op, err := p.waitForOperation(ctx, pool.ID, operationID, "create")
-	if err != nil {
+	if _, err := p.waitForOperation(ctx, pool.ID, operationID, "create"); err != nil {
 		return nil, fmt.Errorf("waiting for scale-up of pool %s: %w", pool.ID, err)
 	}
 
-	nodeID := op.ResourceID
+	newNode, err := p.latestNode(ctx, pool.ID)
+	if err != nil {
+		return nil, fmt.Errorf("finding new node in pool %s: %w", pool.ID, err)
+	}
+
 	log.Info().
 		Str("pool_id", pool.ID).
-		Str("node_id", nodeID).
-		Msg("create: new node identified from operation")
+		Str("node_id", newNode.ID).
+		Str("node_name", newNode.Name).
+		Msg("create: new node identified")
 
 	return &karpv1.NodeClaim{
 		Status: karpv1.NodeClaimStatus{
-			ProviderID:  fmt.Sprintf("nirvana://%s/%s/%s", p.clusterID, pool.ID, nodeID),
+			ProviderID:  fmt.Sprintf("nirvana://%s/%s/%s", p.clusterID, pool.ID, newNode.ID),
 			Capacity:    capacity,
 			Allocatable: capacity,
 		},
@@ -295,6 +299,34 @@ func (p *CloudProvider) selectPoolForCreate(pools []client.WorkerPool, requested
 	}
 
 	return nil, errPoolsTemporarilyUnavailable
+}
+
+func (p *CloudProvider) latestNode(ctx context.Context, poolID string) (*client.WorkerNode, error) {
+	var lastErr error
+	for attempt := 0; attempt < 3; attempt++ {
+		if attempt > 0 {
+			time.Sleep(2 * time.Second)
+		}
+		nodes, err := p.nirvanaClient.ListWorkerNodes(ctx, p.clusterID, poolID)
+		if err != nil {
+			lastErr = err
+			log.Warn().Err(err).Int("attempt", attempt+1).Str("pool_id", poolID).Msg("create: retrying node list")
+			continue
+		}
+		if len(nodes) == 0 {
+			lastErr = fmt.Errorf("no nodes found in pool")
+			continue
+		}
+
+		latest := 0
+		for i, n := range nodes {
+			if n.CreatedAt.After(nodes[latest].CreatedAt) {
+				latest = i
+			}
+		}
+		return &nodes[latest], nil
+	}
+	return nil, fmt.Errorf("listing nodes after 3 attempts: %w", lastErr)
 }
 
 func (p *CloudProvider) waitForOperation(ctx context.Context, poolID, operationID, action string) (*operations.Operation, error) {
