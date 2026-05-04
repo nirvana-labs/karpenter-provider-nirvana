@@ -163,7 +163,7 @@ func (p *CloudProvider) Delete(ctx context.Context, nodeClaim *karpv1.NodeClaim)
 		return cloudprovider.NewNodeClaimNotFoundError(fmt.Errorf("pool %s at minimum capacity", poolID))
 	}
 
-	if p.cooldowns.IsInCooldown(poolID) {
+	if !p.cooldowns.TryReserve(poolID) {
 		remaining := p.cooldowns.GetCooldownRemaining(poolID)
 		log.Warn().
 			Str("pool_id", poolID).
@@ -175,6 +175,7 @@ func (p *CloudProvider) Delete(ctx context.Context, nodeClaim *karpv1.NodeClaim)
 	targetCount := pool.NodeCount - 1
 
 	if err := p.nirvanaClient.CheckPoolUpdateAvailability(ctx, p.clusterID, poolID, targetCount); err != nil {
+		p.cooldowns.ClearCooldown(poolID)
 		log.Warn().Err(err).Str("pool_id", poolID).Int("target_count", targetCount).Msg("delete: no availability for scale-down")
 		return fmt.Errorf("no availability for pool %s: %w", poolID, err)
 	}
@@ -188,6 +189,7 @@ func (p *CloudProvider) Delete(ctx context.Context, nodeClaim *karpv1.NodeClaim)
 
 	operationID, err := p.nirvanaClient.UpdatePool(ctx, p.clusterID, poolID, targetCount)
 	if err != nil {
+		p.cooldowns.ClearCooldown(poolID)
 		return fmt.Errorf("scaling down pool %s: %w", poolID, err)
 	}
 
@@ -196,7 +198,6 @@ func (p *CloudProvider) Delete(ctx context.Context, nodeClaim *karpv1.NodeClaim)
 		Str("operation_id", operationID).
 		Msg("delete: scale-down operation submitted")
 
-	p.cooldowns.RecordScaleStart(poolID)
 	p.trackOperation(ctx, poolID, operationID, "delete")
 
 	return nil
