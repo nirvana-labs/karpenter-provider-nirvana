@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.7.2](https://github.com/nirvana-labs/karpenter-provider-nirvana/compare/v0.7.1...v0.7.2) (2026-05-04)
+
+
+### Bug Fixes
+
+* enforce maximum cooldown duration in RecordScaleComplete ([#26](https://github.com/nirvana-labs/karpenter-provider-nirvana/issues/26)) ([d0bb6fb](https://github.com/nirvana-labs/karpenter-provider-nirvana/commit/d0bb6fb4c3833f2c42b9f49feef54775ab1975a3))
+
 ## [0.7.1](https://github.com/nirvana-labs/karpenter-provider-nirvana/compare/v0.7.0...v0.7.1) (2026-05-04)
 
 
