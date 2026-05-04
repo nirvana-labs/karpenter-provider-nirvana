@@ -67,13 +67,13 @@ func (p *CloudProvider) Create(ctx context.Context, nodeClaim *karpv1.NodeClaim)
 		Str("requested_instance_type", requestedType).
 		Msg("create: fetched pools")
 
-	pool := p.selectPoolForCreate(pools, requestedType)
-	if pool == nil {
-		log.Warn().
+	pool, err := p.selectPoolForCreate(pools, requestedType)
+	if err != nil {
+		log.Warn().Err(err).
 			Str("nodeclaim", nodeClaim.Name).
 			Str("requested_instance_type", requestedType).
 			Msg("create: no eligible pool found")
-		return nil, cloudprovider.NewInsufficientCapacityError(fmt.Errorf("no eligible pools available for instance type %s", requestedType))
+		return nil, err
 	}
 
 	log.Info().
@@ -251,7 +251,9 @@ func (p *CloudProvider) GetSupportedNodeClasses() []status.Object {
 	return []status.Object{&v1alpha1.NirvanaNodeClass{}}
 }
 
-func (p *CloudProvider) selectPoolForCreate(pools []client.WorkerPool, requestedType string) *client.WorkerPool {
+var errAllPoolsInCooldown = fmt.Errorf("all candidate pools are in cooldown")
+
+func (p *CloudProvider) selectPoolForCreate(pools []client.WorkerPool, requestedType string) (*client.WorkerPool, error) {
 	candidates := make([]int, 0, len(pools))
 
 	for i, pool := range pools {
@@ -270,6 +272,10 @@ func (p *CloudProvider) selectPoolForCreate(pools []client.WorkerPool, requested
 		candidates = append(candidates, i)
 	}
 
+	if len(candidates) == 0 {
+		return nil, cloudprovider.NewInsufficientCapacityError(fmt.Errorf("no eligible pools available for instance type %s", requestedType))
+	}
+
 	sort.Slice(candidates, func(a, b int) bool {
 		return pools[candidates[a]].NodeCount < pools[candidates[b]].NodeCount
 	})
@@ -277,13 +283,13 @@ func (p *CloudProvider) selectPoolForCreate(pools []client.WorkerPool, requested
 	for _, idx := range candidates {
 		pool := &pools[idx]
 		if p.cooldowns.TryReserve(pool.ID) {
-			return pool
+			return pool, nil
 		}
 		remaining := p.cooldowns.GetCooldownRemaining(pool.ID)
 		log.Warn().Str("pool_id", pool.ID).Dur("remaining", remaining).Msg("create: pool in cooldown, skipping")
 	}
 
-	return nil
+	return nil, errAllPoolsInCooldown
 }
 
 func (p *CloudProvider) waitForOperation(ctx context.Context, poolID, operationID, action string) (*operations.Operation, error) {
