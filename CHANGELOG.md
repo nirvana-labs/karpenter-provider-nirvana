@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.7.3](https://github.com/nirvana-labs/karpenter-provider-nirvana/compare/v0.7.2...v0.7.3) (2026-05-04)
+
+
+### Bug Fixes
+
+* new node labeling ([#30](https://github.com/nirvana-labs/karpenter-provider-nirvana/issues/30)) ([e501093](https://github.com/nirvana-labs/karpenter-provider-nirvana/commit/e5010931e1dcbb1b12289ab72f5f9c05033e91d3))
+
 ## [0.7.2](https://github.com/nirvana-labs/karpenter-provider-nirvana/compare/v0.7.1...v0.7.2) (2026-05-04)
 
 
