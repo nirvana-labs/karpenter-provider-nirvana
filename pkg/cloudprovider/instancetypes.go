@@ -50,7 +50,7 @@ func PoolsToInstanceTypes(pools []client.WorkerPool, instanceTypeSpecs map[strin
 			Offerings: cloudprovider.Offerings{
 				&cloudprovider.Offering{
 					Requirements: scheduling.NewRequirements(
-						scheduling.NewRequirement(karpv1.CapacityTypeLabelKey, corev1.NodeSelectorOpIn, karpv1.CapacityTypeReserved),
+						scheduling.NewRequirement(karpv1.CapacityTypeLabelKey, corev1.NodeSelectorOpIn, karpv1.CapacityTypeOnDemand),
 						scheduling.NewRequirement(corev1.LabelTopologyZone, corev1.NodeSelectorOpIn, region),
 					),
 					Price:     0,
