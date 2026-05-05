@@ -183,7 +183,7 @@ func (p *CloudProvider) Delete(ctx context.Context, nodeClaim *karpv1.NodeClaim)
 		if client.IsNotFound(err) {
 			return cloudprovider.NewNodeClaimNotFoundError(fmt.Errorf("node %s not found: %w", nodeID, err))
 		}
-		return fmt.Errorf("deleting node %s from pool %s: %w", nodeID, poolID, err)
+		return err
 	}
 
 	log.Info().
