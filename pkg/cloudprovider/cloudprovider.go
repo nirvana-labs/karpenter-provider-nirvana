@@ -165,15 +165,6 @@ func (p *CloudProvider) Delete(ctx context.Context, nodeClaim *karpv1.NodeClaim)
 		return cloudprovider.NewNodeClaimNotFoundError(fmt.Errorf("invalid provider id: %w", err))
 	}
 
-	if !p.cooldowns.TryReserve(poolID) {
-		remaining := p.cooldowns.GetCooldownRemaining(poolID)
-		log.Warn().
-			Str("pool_id", poolID).
-			Dur("remaining", remaining).
-			Msg("delete: pool in cooldown")
-		return fmt.Errorf("pool %s in cooldown for %s", poolID, remaining)
-	}
-
 	log.Info().
 		Str("pool_id", poolID).
 		Str("node_id", nodeID).
@@ -181,7 +172,6 @@ func (p *CloudProvider) Delete(ctx context.Context, nodeClaim *karpv1.NodeClaim)
 
 	operationID, err := p.nirvanaClient.DeleteWorkerNode(ctx, p.clusterID, poolID, nodeID)
 	if err != nil {
-		p.cooldowns.ClearCooldown(poolID)
 		if client.IsNotFound(err) {
 			return cloudprovider.NewNodeClaimNotFoundError(fmt.Errorf("node %s not found: %w", nodeID, err))
 		}
