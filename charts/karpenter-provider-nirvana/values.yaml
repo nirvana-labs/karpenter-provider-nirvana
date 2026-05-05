@@ -4,7 +4,7 @@ replicaCount: 1
 
 image:
   repository: ghcr.io/nirvana-labs/karpenter-provider-nirvana
-  # Empty defaults to chart appVersion.
+  # Empty defaults to chart version (same as controller release tag).
   tag: ""
   pullPolicy: IfNotPresent
 

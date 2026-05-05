@@ -50,3 +50,9 @@ The upstream `karpenter.sh/*` CRDs are vendored at the version pinned in `go.mod
 ## Pod placement
 
 The default `affinity` excludes nodes carrying the `karpenter.sh/nodepool` label, so the controller can't schedule onto a node it later disrupts. Override `affinity` if your cluster topology requires a different rule.
+
+## Versioning
+
+`Chart.yaml` declares only `version` — `appVersion` is intentionally omitted. The chart version tracks the controller release tag in lockstep, bumped automatically by release-please on every release via the `# x-release-please-version` marker on the `version` line (configured through `extra-files` in `.release-please-config.json`).
+
+The chart's own templates reference `.Chart.Version` everywhere `appVersion` would otherwise apply (image tag default, `app.kubernetes.io/version` label), so this is invisible to deploys. External tooling that reads `.Chart.AppVersion` directly will see an empty string — Helm does not auto-fall-back from `.Chart.AppVersion` to `.Chart.Version`. If a downstream consumer requires `appVersion` populated, set it explicitly in `Chart.yaml`.

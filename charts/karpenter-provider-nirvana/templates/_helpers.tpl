@@ -38,9 +38,7 @@ Common labels.
 {{- define "karpenter.labels" -}}
 helm.sh/chart: {{ include "karpenter.chart" . }}
 {{ include "karpenter.selectorLabels" . }}
-{{- if .Chart.AppVersion }}
-app.kubernetes.io/version: {{ .Chart.AppVersion | quote }}
-{{- end }}
+app.kubernetes.io/version: {{ .Chart.Version | quote }}
 app.kubernetes.io/managed-by: {{ .Release.Service }}
 {{- end }}
 
