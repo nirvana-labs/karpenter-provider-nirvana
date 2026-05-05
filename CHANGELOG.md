@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.9.0](https://github.com/nirvana-labs/karpenter-provider-nirvana/compare/v0.8.1...v0.9.0) (2026-05-05)
+
+
+### Features
+
+* add requirements for instance types to include architecture and OS labels ([#39](https://github.com/nirvana-labs/karpenter-provider-nirvana/issues/39)) ([0db26be](https://github.com/nirvana-labs/karpenter-provider-nirvana/commit/0db26be6320ee015ae4a4453ab5dd2b7f6a8c83f))
+
 ## [0.8.1](https://github.com/nirvana-labs/karpenter-provider-nirvana/compare/v0.8.0...v0.8.1) (2026-05-05)
 
 
