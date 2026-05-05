@@ -1,0 +1,62 @@
+# Default values for karpenter-provider-nirvana.
+
+replicaCount: 1
+
+image:
+  repository: ghcr.io/nirvana-labs/karpenter-provider-nirvana
+  # Empty defaults to chart appVersion.
+  tag: ""
+  pullPolicy: IfNotPresent
+
+nameOverride: ""
+fullnameOverride: ""
+
+# Nirvana API config. clusterID is required (full NKS cluster UUID).
+# The Secret is provisioned by nirvana-api at cluster-create time via
+# cloud-init — operators don't manage it directly.
+nirvana:
+  clusterID: ""
+  apiKeySecretName: nirvana-api-key
+  apiKeySecretKey: api-key
+
+logging:
+  level: info
+  json: true
+
+# Pod and container security context. Defaults satisfy PSA `restricted` and
+# match the distroless :nonroot base image (UID 65532).
+podSecurityContext:
+  runAsNonRoot: true
+  runAsUser: 65532
+  runAsGroup: 65532
+  seccompProfile:
+    type: RuntimeDefault
+
+securityContext:
+  allowPrivilegeEscalation: false
+  capabilities:
+    drop: ["ALL"]
+  readOnlyRootFilesystem: true
+
+resources:
+  requests:
+    cpu: 100m
+    memory: 128Mi
+  limits:
+    cpu: 500m
+    memory: 256Mi
+
+# Karpenter pods must not run on nodes Karpenter manages — disruption would
+# evict the controller. The default affinity excludes any node that carries
+# the karpenter.sh/nodepool label.
+affinity:
+  nodeAffinity:
+    requiredDuringSchedulingIgnoredDuringExecution:
+      nodeSelectorTerms:
+        - matchExpressions:
+            - key: karpenter.sh/nodepool
+              operator: DoesNotExist
+
+nodeSelector: {}
+tolerations: []
+priorityClassName: ""
