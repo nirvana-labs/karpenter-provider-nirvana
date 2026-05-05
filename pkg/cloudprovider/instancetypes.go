@@ -35,6 +35,10 @@ func PoolsToInstanceTypes(pools []client.WorkerPool, instanceTypeSpecs map[strin
 
 		it := &cloudprovider.InstanceType{
 			Name: name,
+			Requirements: scheduling.NewRequirements(
+				scheduling.NewRequirement(corev1.LabelArchStable, corev1.NodeSelectorOpIn, "amd64"),
+				scheduling.NewRequirement(corev1.LabelOSStable, corev1.NodeSelectorOpIn, "linux"),
+			),
 			Capacity: corev1.ResourceList{
 				corev1.ResourceCPU:              resource.MustParse(fmt.Sprintf("%d", spec.VCPU)),
 				corev1.ResourceMemory:           resource.MustParse(fmt.Sprintf("%dGi", spec.MemoryGB)),
