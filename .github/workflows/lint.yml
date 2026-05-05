@@ -19,6 +19,7 @@ permissions:
 env:
   GOLANG_VER: 1.26.1
   TASK_VER: 3.43.3
+  HELM_VER: v3.19.0
 
 jobs:
   lint:
@@ -48,6 +49,32 @@ jobs:
 
       - name: Lint
         run: task lint
+
+  chart-lint:
+    name: Chart Lint
+    runs-on: blacksmith-4vcpu-ubuntu-2404
+    timeout-minutes: 5
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          fetch-depth: 0
+
+      - name: Install Helm
+        uses: azure/setup-helm@1a275c3b69536ee54be43f2070a358922e12c8d4 # v4.3.1
+        with:
+          version: ${{ env.HELM_VER }}
+
+      - name: Helm lint
+        run: helm lint charts/karpenter-provider-nirvana/
+
+      - name: Helm template (sanity render with placeholder clusterID)
+        run: |
+          helm template karpenter charts/karpenter-provider-nirvana/ \
+            --set nirvana.clusterID=00000000-0000-0000-0000-000000000000 \
+            > /tmp/rendered.yaml
+          test -s /tmp/rendered.yaml
 
   pr-title:
     name: PR Title

@@ -19,6 +19,9 @@
         { "type": "build", "hidden": true },
         { "type": "ci", "hidden": true },
         { "type": "chore", "hidden": true }
+      ],
+      "extra-files": [
+        "charts/karpenter-provider-nirvana/Chart.yaml"
       ]
     }
   }
