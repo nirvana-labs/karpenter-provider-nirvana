@@ -14,8 +14,9 @@ Karpenter cloud provider for Nirvana NKS clusters. Deploys the controller and th
       oci://ghcr.io/nirvana-labs/charts/karpenter-provider-nirvana \
       --namespace karpenter \
       --create-namespace \
-      --version 0.1.0 \
       --set nirvana.clusterID=<full-NKS-cluster-uuid>
+
+Pin to a specific release with `--version X.Y.Z` (chart and controller versions track each other in lockstep — see the changelog for available versions). Omitting `--version` pulls the latest published tag.
 
 The chart does **not** create the namespace itself — apply PSA labels (or any other policies) on the namespace separately. This keeps the chart focused on the controller and matches the convention used by other Karpenter provider charts.
 
