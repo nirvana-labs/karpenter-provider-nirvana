@@ -11,6 +11,7 @@ import (
 	"github.com/rs/zerolog/log"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	karpv1 "sigs.k8s.io/karpenter/pkg/apis/v1"
 	"sigs.k8s.io/karpenter/pkg/cloudprovider"
 
@@ -136,6 +137,13 @@ func (p *CloudProvider) Create(ctx context.Context, nodeClaim *karpv1.NodeClaim)
 		Msg("create: new node identified")
 
 	return &karpv1.NodeClaim{
+		ObjectMeta: metav1.ObjectMeta{
+			Labels: map[string]string{
+				corev1.LabelInstanceTypeStable: pool.NodeConfig.InstanceType,
+				corev1.LabelTopologyZone:       p.region,
+				karpv1.CapacityTypeLabelKey:    karpv1.CapacityTypeOnDemand,
+			},
+		},
 		Status: karpv1.NodeClaimStatus{
 			ProviderID:  fmt.Sprintf("nirvana://%s/%s/%s", p.clusterID, pool.ID, newNode.ID),
 			Capacity:    capacity,
