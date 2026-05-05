@@ -142,6 +142,8 @@ func (p *CloudProvider) Create(ctx context.Context, nodeClaim *karpv1.NodeClaim)
 				corev1.LabelInstanceTypeStable: pool.NodeConfig.InstanceType,
 				corev1.LabelTopologyZone:       p.region,
 				karpv1.CapacityTypeLabelKey:    karpv1.CapacityTypeOnDemand,
+				corev1.LabelArchStable:         "amd64",
+				corev1.LabelOSStable:           "linux",
 			},
 		},
 		Status: karpv1.NodeClaimStatus{
