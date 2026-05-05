@@ -141,7 +141,7 @@ func (p *CloudProvider) Create(ctx context.Context, nodeClaim *karpv1.NodeClaim)
 			Labels: map[string]string{
 				corev1.LabelInstanceTypeStable: pool.NodeConfig.InstanceType,
 				corev1.LabelTopologyZone:       p.region,
-				karpv1.CapacityTypeLabelKey:    karpv1.CapacityTypeOnDemand,
+				karpv1.CapacityTypeLabelKey:    karpv1.CapacityTypeReserved,
 			},
 		},
 		Status: karpv1.NodeClaimStatus{
