@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.10.0](https://github.com/nirvana-labs/karpenter-provider-nirvana/compare/v0.9.0...v0.10.0) (2026-05-05)
+
+
+### Features
+
+* add architecture and OS labels to node claims ([#41](https://github.com/nirvana-labs/karpenter-provider-nirvana/issues/41)) ([a5f4d98](https://github.com/nirvana-labs/karpenter-provider-nirvana/commit/a5f4d980b41ce66559b73bbcbd6ef411e6a2118d))
+
 ## [0.9.0](https://github.com/nirvana-labs/karpenter-provider-nirvana/compare/v0.8.1...v0.9.0) (2026-05-05)
 
 
