@@ -15,6 +15,7 @@ permissions:
 env:
   REGISTRY: ghcr.io
   GOLANG_VER: 1.26.1
+  HELM_VER: v3.19.0
 
 jobs:
   release:
@@ -54,3 +55,37 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GORELEASER_CURRENT_TAG: ${{ github.ref_name }}
+
+  chart-release:
+    name: Release Helm Chart
+    needs: release
+    runs-on: blacksmith-4vcpu-ubuntu-2404
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          fetch-depth: 0
+          ref: ${{ github.ref }}
+
+      - name: Install Helm
+        uses: azure/setup-helm@1a275c3b69536ee54be43f2070a358922e12c8d4 # v4.3.1
+        with:
+          version: ${{ env.HELM_VER }}
+
+      - name: Login to GHCR
+        run: echo "${{ secrets.GITHUB_TOKEN }}" | helm registry login ${{ env.REGISTRY }} -u ${{ github.actor }} --password-stdin
+
+      - name: Package chart
+        id: package
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          helm package charts/karpenter-provider-nirvana/ --destination /tmp
+          echo "tarball=/tmp/karpenter-provider-nirvana-${VERSION}.tgz" >> "$GITHUB_OUTPUT"
+
+      - name: Push chart to OCI registry
+        run: |
+          helm push "${{ steps.package.outputs.tarball }}" oci://${{ env.REGISTRY }}/nirvana-labs/charts

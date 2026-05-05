@@ -1,0 +1,16 @@
+apiVersion: v2
+name: karpenter-provider-nirvana
+description: Karpenter cloud provider for Nirvana NKS clusters.
+type: application
+version: 0.11.0
+keywords:
+  - karpenter
+  - autoscaling
+  - kubernetes
+  - nirvana
+home: https://github.com/nirvana-labs/karpenter-provider-nirvana
+sources:
+  - https://github.com/nirvana-labs/karpenter-provider-nirvana
+maintainers:
+  - name: Nirvana Labs
+    url: https://nirvanalabs.io

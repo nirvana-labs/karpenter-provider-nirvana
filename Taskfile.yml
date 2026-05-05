@@ -6,6 +6,10 @@ vars:
   BINARY: karpenter-provider-nirvana
   LICENSE_IGNORES: >-
     --ignore=github.com/nirvana-labs
+  # Pinned to match sigs.k8s.io/karpenter version in go.mod. Bump when the
+  # library bumps and re-run `task vendor-crds`.
+  KARPENTER_LIBRARY_VERSION: v1.9.0
+  KARPENTER_CRDS_DIR: charts/karpenter-provider-nirvana/crds
   GOBIN:
     sh: |
       if [ -n "$(go env GOBIN)" ]; then
@@ -88,3 +92,24 @@ tasks:
     desc: Run goreleaser in snapshot mode (builds artifacts locally, does not push)
     cmds:
       - "{{.GOBIN}}/goreleaser release --snapshot --clean --skip=publish"
+
+  vendor-crds:
+    desc: Re-vendor karpenter.sh core CRDs from upstream at KARPENTER_LIBRARY_VERSION
+    cmds:
+      - |
+        curl -fsSL "https://raw.githubusercontent.com/kubernetes-sigs/karpenter/{{.KARPENTER_LIBRARY_VERSION}}/pkg/apis/crds/karpenter.sh_nodepools.yaml" \
+          -o {{.KARPENTER_CRDS_DIR}}/karpenter.sh_nodepools.yaml
+      - |
+        curl -fsSL "https://raw.githubusercontent.com/kubernetes-sigs/karpenter/{{.KARPENTER_LIBRARY_VERSION}}/pkg/apis/crds/karpenter.sh_nodeclaims.yaml" \
+          -o {{.KARPENTER_CRDS_DIR}}/karpenter.sh_nodeclaims.yaml
+      - echo "Vendored karpenter.sh CRDs at {{.KARPENTER_LIBRARY_VERSION}}"
+
+  helm:lint:
+    desc: Lint the chart
+    cmds:
+      - helm lint charts/karpenter-provider-nirvana/
+
+  helm:template:
+    desc: Render the chart with a sample clusterID for sanity checking
+    cmds:
+      - helm template karpenter charts/karpenter-provider-nirvana/ --set nirvana.clusterID=00000000-0000-0000-0000-000000000000
