@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.11.0](https://github.com/nirvana-labs/karpenter-provider-nirvana/compare/v0.10.0...v0.11.0) (2026-05-05)
+
+
+### Features
+
+* **chart:** contribute initial helm chart ([#44](https://github.com/nirvana-labs/karpenter-provider-nirvana/issues/44)) ([ee94b60](https://github.com/nirvana-labs/karpenter-provider-nirvana/commit/ee94b6010195eca997faff3aaaf6e45cce7b17dd))
+
 ## [0.10.0](https://github.com/nirvana-labs/karpenter-provider-nirvana/compare/v0.9.0...v0.10.0) (2026-05-05)
 
 
