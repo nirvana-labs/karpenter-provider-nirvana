@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.11.0](https://github.com/nirvana-labs/karpenter-provider-nirvana/compare/v0.10.0...v0.11.0) (2026-05-05)
+
+
+### Features
+
+* **chart:** contribute initial helm chart ([#44](https://github.com/nirvana-labs/karpenter-provider-nirvana/issues/44)) ([ee94b60](https://github.com/nirvana-labs/karpenter-provider-nirvana/commit/ee94b6010195eca997faff3aaaf6e45cce7b17dd))
+
+
+### Bug Fixes
+
+* **chart:** drop appVersion in favor of single version field ([#46](https://github.com/nirvana-labs/karpenter-provider-nirvana/issues/46)) ([b66d147](https://github.com/nirvana-labs/karpenter-provider-nirvana/commit/b66d147ff8c63d7f6b099f99a9f3bf2d6f36972e))
+
 ## [0.10.0](https://github.com/nirvana-labs/karpenter-provider-nirvana/compare/v0.9.0...v0.10.0) (2026-05-05)
 
 
