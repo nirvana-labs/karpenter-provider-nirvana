@@ -314,7 +314,9 @@ func (p *CloudProvider) waitForOperation(ctx context.Context, poolID, operationI
 	op, err := p.nirvanaClient.WaitForOperation(ctx, operationID)
 	duration := time.Since(start)
 
-	p.cooldowns.RecordScaleComplete(poolID)
+	if action == "create" {
+		p.cooldowns.RecordScaleComplete(poolID)
+	}
 
 	if err != nil {
 		log.Error().
