@@ -46,6 +46,20 @@ resources:
     cpu: 500m
     memory: 256Mi
 
+# Probe configuration. Defaults target the karpenter library's built-in
+# health probe server on :8081 (paths /healthz and /readyz).
+probes:
+  liveness:
+    initialDelaySeconds: 30
+    periodSeconds: 30
+    timeoutSeconds: 30
+    failureThreshold: 3
+  readiness:
+    initialDelaySeconds: 5
+    periodSeconds: 10
+    timeoutSeconds: 30
+    failureThreshold: 3
+
 # Karpenter pods must not run on nodes Karpenter manages — disruption would
 # evict the controller. The default affinity excludes any node that carries
 # the karpenter.sh/nodepool label.

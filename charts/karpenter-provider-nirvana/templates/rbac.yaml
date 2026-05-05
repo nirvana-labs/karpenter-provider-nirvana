@@ -21,12 +21,15 @@ rules:
     resources: ["nirvananodeclasses/finalizers"]
     verbs: ["update"]
 
-  # Core k8s reads
+  # Core k8s reads — cluster-scoped resources Karpenter inspects for scheduling.
+  # Note: cluster-wide reads on configmaps / secrets / serviceaccounts are
+  # deliberately omitted. The API key Secret is resolved by kubelet via
+  # secretKeyRef, not by the controller, so no controller-side read of it is
+  # needed. If Karpenter core ever requires namespaced Secret/ConfigMap access
+  # (e.g. image-pull-secret resolution for pending pods), add a narrowly
+  # scoped Role rather than re-broadening this ClusterRole.
   - apiGroups: [""]
     resources: ["pods", "nodes", "persistentvolumes", "persistentvolumeclaims", "replicationcontrollers", "namespaces"]
-    verbs: ["get", "list", "watch"]
-  - apiGroups: [""]
-    resources: ["configmaps", "secrets", "serviceaccounts"]
     verbs: ["get", "list", "watch"]
 
   # Node lifecycle (drain, taint, terminate)
