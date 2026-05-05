@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.8.0](https://github.com/nirvana-labs/karpenter-provider-nirvana/compare/v0.7.3...v0.8.0) (2026-05-05)
+
+
+### Features
+
+* introduce surgical delete for scale-down ([#34](https://github.com/nirvana-labs/karpenter-provider-nirvana/issues/34)) ([8fcecd9](https://github.com/nirvana-labs/karpenter-provider-nirvana/commit/8fcecd95549a583b647d6babf3928163568e3df2))
+
 ## [0.7.3](https://github.com/nirvana-labs/karpenter-provider-nirvana/compare/v0.7.2...v0.7.3) (2026-05-04)
 
 
