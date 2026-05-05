@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.8.1](https://github.com/nirvana-labs/karpenter-provider-nirvana/compare/v0.8.0...v0.8.1) (2026-05-05)
+
+
+### Bug Fixes
+
+* update capacity type label from OnDemand to Reserved ([#36](https://github.com/nirvana-labs/karpenter-provider-nirvana/issues/36)) ([5641233](https://github.com/nirvana-labs/karpenter-provider-nirvana/commit/5641233b4ed1112f88874d0ab7cab99dbe71ea22))
+
 ## [0.8.0](https://github.com/nirvana-labs/karpenter-provider-nirvana/compare/v0.7.3...v0.8.0) (2026-05-05)
 
 
