@@ -21,6 +21,14 @@ func (c *Client) ListWorkerNodes(ctx context.Context, clusterID, poolID string) 
 	return nodes, nil
 }
 
+func (c *Client) DeleteWorkerNode(ctx context.Context, clusterID, poolID, nodeID string) (string, error) {
+	op, err := c.sdk.NKS.Clusters.Pools.Nodes.Delete(ctx, clusterID, poolID, nodeID)
+	if err != nil {
+		return "", fmt.Errorf("deleting node %s from pool %s: %w", nodeID, poolID, err)
+	}
+	return op.ID, nil
+}
+
 func convertNode(n nks.NKSNode) WorkerNode {
 	var privateIP *string
 	if n.PrivateIP != "" {
