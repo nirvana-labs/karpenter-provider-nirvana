@@ -50,3 +50,7 @@ The upstream `karpenter.sh/*` CRDs are vendored at the version pinned in `go.mod
 ## Pod placement
 
 The default `affinity` excludes nodes carrying the `karpenter.sh/nodepool` label, so the controller can't schedule onto a node it later disrupts. Override `affinity` if your cluster topology requires a different rule.
+
+## Versioning
+
+`Chart.yaml` declares only `version` — `appVersion` is intentionally omitted. The chart version tracks the controller release tag in lockstep, bumped automatically by release-please's Helm updater on every release. Helm consumers that read `.Chart.AppVersion` (e.g. for `app.kubernetes.io/version` labels) fall through to `.Chart.Version`, which is identical.

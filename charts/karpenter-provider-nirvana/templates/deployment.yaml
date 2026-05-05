@@ -37,7 +37,7 @@ spec:
       {{- end }}
       containers:
         - name: controller
-          image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.Version }}"
           imagePullPolicy: {{ .Values.image.pullPolicy }}
           env:
             - name: NIRVANA_CLUSTER_ID
