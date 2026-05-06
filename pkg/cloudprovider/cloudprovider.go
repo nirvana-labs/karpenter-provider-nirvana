@@ -19,7 +19,6 @@ import (
 
 	"github.com/nirvana-labs/karpenter-provider-nirvana/pkg/apis/v1alpha1"
 	"github.com/nirvana-labs/karpenter-provider-nirvana/pkg/client"
-	"github.com/nirvana-labs/karpenter-provider-nirvana/pkg/cooldown"
 )
 
 const (
@@ -34,15 +33,13 @@ type CloudProvider struct {
 	nirvanaClient *client.Client
 	clusterID     string
 	region        string
-	cooldowns     *cooldown.Manager
 }
 
-func New(nirvanaClient *client.Client, clusterID, region string, cooldowns *cooldown.Manager) *CloudProvider {
+func New(nirvanaClient *client.Client, clusterID, region string) *CloudProvider {
 	return &CloudProvider{
 		nirvanaClient: nirvanaClient,
 		clusterID:     clusterID,
 		region:        region,
-		cooldowns:     cooldowns,
 	}
 }
 
@@ -86,19 +83,16 @@ func (p *CloudProvider) Create(ctx context.Context, nodeClaim *karpv1.NodeClaim)
 
 	specs, err := p.nirvanaClient.ListInstanceTypes(ctx)
 	if err != nil {
-		p.cooldowns.ClearCooldown(pool.ID)
 		return nil, fmt.Errorf("listing instance types: %w", err)
 	}
 	capacity, err := capacityFromSpec(pool.NodeConfig.InstanceType, specs, pool.NodeConfig.BootVolume.Size)
 	if err != nil {
-		p.cooldowns.ClearCooldown(pool.ID)
 		return nil, fmt.Errorf("resolving capacity for pool %s: %w", pool.ID, err)
 	}
 
 	targetCount := pool.NodeCount + 1
 
 	if err := p.nirvanaClient.CheckPoolUpdateAvailability(ctx, p.clusterID, pool.ID, targetCount); err != nil {
-		p.cooldowns.ClearCooldown(pool.ID)
 		log.Warn().Err(err).Str("pool_id", pool.ID).Int("target_count", targetCount).Msg("create: no availability for scale-up")
 		return nil, cloudprovider.NewInsufficientCapacityError(fmt.Errorf("no availability for pool %s: %w", pool.ID, err))
 	}
@@ -112,7 +106,10 @@ func (p *CloudProvider) Create(ctx context.Context, nodeClaim *karpv1.NodeClaim)
 
 	operationID, err := p.nirvanaClient.UpdatePool(ctx, p.clusterID, pool.ID, targetCount)
 	if err != nil {
-		p.cooldowns.ClearCooldown(pool.ID)
+		if client.IsConflict(err) {
+			log.Warn().Str("pool_id", pool.ID).Msg("create: pool has active operation, retrying")
+			return nil, errPoolsTemporarilyUnavailable
+		}
 		return nil, fmt.Errorf("scaling pool %s: %w", pool.ID, err)
 	}
 
@@ -165,15 +162,6 @@ func (p *CloudProvider) Delete(ctx context.Context, nodeClaim *karpv1.NodeClaim)
 		return cloudprovider.NewNodeClaimNotFoundError(fmt.Errorf("invalid provider id: %w", err))
 	}
 
-	if !p.cooldowns.TryReserve(poolID) {
-		remaining := p.cooldowns.GetCooldownRemaining(poolID)
-		log.Warn().
-			Str("pool_id", poolID).
-			Dur("remaining", remaining).
-			Msg("delete: pool in cooldown")
-		return fmt.Errorf("pool %s in cooldown for %s", poolID, remaining)
-	}
-
 	log.Info().
 		Str("pool_id", poolID).
 		Str("node_id", nodeID).
@@ -181,9 +169,11 @@ func (p *CloudProvider) Delete(ctx context.Context, nodeClaim *karpv1.NodeClaim)
 
 	operationID, err := p.nirvanaClient.DeleteWorkerNode(ctx, p.clusterID, poolID, nodeID)
 	if err != nil {
-		p.cooldowns.ClearCooldown(poolID)
 		if client.IsNotFound(err) {
 			return cloudprovider.NewNodeClaimNotFoundError(fmt.Errorf("node %s not found: %w", nodeID, err))
+		}
+		if client.IsConflict(err) {
+			return fmt.Errorf("pool %s has active operation, retrying: %w", poolID, err)
 		}
 		return err
 	}
@@ -274,16 +264,7 @@ func (p *CloudProvider) selectPoolForCreate(pools []client.WorkerPool, requested
 		return pools[candidates[a]].NodeCount < pools[candidates[b]].NodeCount
 	})
 
-	for _, idx := range candidates {
-		pool := &pools[idx]
-		if p.cooldowns.TryReserve(pool.ID) {
-			return pool, nil
-		}
-		remaining := p.cooldowns.GetCooldownRemaining(pool.ID)
-		log.Warn().Str("pool_id", pool.ID).Dur("remaining", remaining).Msg("create: pool in cooldown, skipping")
-	}
-
-	return nil, errPoolsTemporarilyUnavailable
+	return &pools[candidates[0]], nil
 }
 
 func (p *CloudProvider) latestNode(ctx context.Context, poolID string, expectedCount int) (*client.WorkerNode, error) {
@@ -323,8 +304,6 @@ func (p *CloudProvider) waitForOperation(ctx context.Context, poolID, operationI
 	start := time.Now()
 	op, err := p.nirvanaClient.WaitForOperation(ctx, operationID)
 	duration := time.Since(start)
-
-	p.cooldowns.RecordScaleComplete(poolID)
 
 	if err != nil {
 		log.Error().

@@ -15,6 +15,14 @@ func IsNotFound(err error) bool {
 	return false
 }
 
+func IsConflict(err error) bool {
+	var apiErr *nks.Error
+	if errors.As(err, &apiErr) {
+		return apiErr.StatusCode == http.StatusConflict
+	}
+	return false
+}
+
 func IsAvailabilityRejection(err error) bool {
 	var apiErr *nks.Error
 	if errors.As(err, &apiErr) {
