@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.12.0](https://github.com/nirvana-labs/karpenter-provider-nirvana/compare/v0.11.0...v0.12.0) (2026-05-06)
+
+
+### Features
+
+* remove cooldown period ([#43](https://github.com/nirvana-labs/karpenter-provider-nirvana/issues/43)) ([ed81224](https://github.com/nirvana-labs/karpenter-provider-nirvana/commit/ed812245056710ea3fbf6ac2cdb30a7b591a995c))
+
 ## [0.11.0](https://github.com/nirvana-labs/karpenter-provider-nirvana/compare/v0.10.0...v0.11.0) (2026-05-05)
 
 
