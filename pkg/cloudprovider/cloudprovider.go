@@ -192,11 +192,63 @@ func (p *CloudProvider) Delete(ctx context.Context, nodeClaim *karpv1.NodeClaim)
 }
 
 func (p *CloudProvider) Get(ctx context.Context, providerID string) (*karpv1.NodeClaim, error) {
-	return nil, cloudprovider.NewNodeClaimNotFoundError(fmt.Errorf("instance not found"))
+	_, poolID, nodeID, err := parseProviderID(providerID)
+	if err != nil {
+		return nil, cloudprovider.NewNodeClaimNotFoundError(fmt.Errorf("invalid provider id: %w", err))
+	}
+
+	nodes, err := p.nirvanaClient.ListWorkerNodes(ctx, p.clusterID, poolID)
+	if err != nil {
+		if client.IsNotFound(err) {
+			return nil, cloudprovider.NewNodeClaimNotFoundError(fmt.Errorf("pool %s not found: %w", poolID, err))
+		}
+		return nil, fmt.Errorf("listing nodes for pool %s: %w", poolID, err)
+	}
+
+	var found *client.WorkerNode
+	for i, n := range nodes {
+		if n.ID == nodeID {
+			found = &nodes[i]
+			break
+		}
+	}
+	if found == nil || found.Status == "deleting" || found.Status == "error" {
+		return nil, cloudprovider.NewNodeClaimNotFoundError(fmt.Errorf("node %s not found in pool %s", nodeID, poolID))
+	}
+
+	return &karpv1.NodeClaim{
+		Status: karpv1.NodeClaimStatus{
+			ProviderID: providerID,
+		},
+	}, nil
 }
 
 func (p *CloudProvider) List(ctx context.Context) ([]*karpv1.NodeClaim, error) {
-	return nil, nil
+	pools, err := p.nirvanaClient.ListPools(ctx, p.clusterID)
+	if err != nil {
+		return nil, fmt.Errorf("listing pools: %w", err)
+	}
+
+	var claims []*karpv1.NodeClaim
+	for _, pool := range pools {
+		nodes, err := p.nirvanaClient.ListWorkerNodes(ctx, p.clusterID, pool.ID)
+		if err != nil {
+			return nil, fmt.Errorf("listing nodes for pool %s: %w", pool.ID, err)
+		}
+
+		for _, node := range nodes {
+			if node.Status == "deleting" || node.Status == "error" {
+				continue
+			}
+			claims = append(claims, &karpv1.NodeClaim{
+				Status: karpv1.NodeClaimStatus{
+					ProviderID: fmt.Sprintf("nirvana://%s/%s/%s", p.clusterID, pool.ID, node.ID),
+				},
+			})
+		}
+	}
+
+	return claims, nil
 }
 
 func (p *CloudProvider) GetInstanceTypes(ctx context.Context, _ *karpv1.NodePool) ([]*cloudprovider.InstanceType, error) {
