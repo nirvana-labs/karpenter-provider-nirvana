@@ -233,8 +233,7 @@ func (p *CloudProvider) List(ctx context.Context) ([]*karpv1.NodeClaim, error) {
 	for _, pool := range pools {
 		nodes, err := p.nirvanaClient.ListWorkerNodes(ctx, p.clusterID, pool.ID)
 		if err != nil {
-			log.Warn().Err(err).Str("pool_id", pool.ID).Msg("list: failed to list nodes, skipping pool")
-			continue
+			return nil, fmt.Errorf("listing nodes for pool %s: %w", pool.ID, err)
 		}
 
 		for _, node := range nodes {
