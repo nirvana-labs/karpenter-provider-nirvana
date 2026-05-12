@@ -21,11 +21,7 @@ import (
 	"github.com/nirvana-labs/karpenter-provider-nirvana/pkg/client"
 )
 
-const (
-	providerName    = "nirvana"
-	maxNodesPerPool = 4
-	minNodesPerPool = 2
-)
+const providerName = "nirvana"
 
 var _ cloudprovider.CloudProvider = (*CloudProvider)(nil)
 
@@ -296,10 +292,6 @@ func (p *CloudProvider) selectPoolForCreate(pools []client.WorkerPool, requested
 		if pool.Status != "ready" {
 			log.Debug().Str("pool_id", pool.ID).Str("status", pool.Status).Msg("create: skipping pool, not ready")
 			hasTemporarySkip = true
-			continue
-		}
-		if pool.NodeCount >= maxNodesPerPool {
-			log.Warn().Str("pool_id", pool.ID).Str("pool_name", pool.Name).Int("current_count", pool.NodeCount).Int("max", maxNodesPerPool).Msg("create: pool at max capacity, skipping")
 			continue
 		}
 		candidates = append(candidates, i)
