@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.14.0](https://github.com/nirvana-labs/karpenter-provider-nirvana/compare/v0.13.0...v0.14.0) (2026-05-13)
+
+
+### Features
+
+* remove testing limits for node pool capacity ([#52](https://github.com/nirvana-labs/karpenter-provider-nirvana/issues/52)) ([568230a](https://github.com/nirvana-labs/karpenter-provider-nirvana/commit/568230ac783714d7596706249297eb87eb1f6c73))
+
 ## [0.13.0](https://github.com/nirvana-labs/karpenter-provider-nirvana/compare/v0.12.0...v0.13.0) (2026-05-07)
 
 
