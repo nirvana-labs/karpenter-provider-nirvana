@@ -280,6 +280,8 @@ func (p *CloudProvider) GetSupportedNodeClasses() []status.Object {
 
 var errPoolsTemporarilyUnavailable = fmt.Errorf("all candidate pools are temporarily unavailable")
 
+const poolMinAge = 10 * time.Minute
+
 func (p *CloudProvider) selectPoolForCreate(pools []client.WorkerPool, requestedType string) (*client.WorkerPool, error) {
 	candidates := make([]int, 0, len(pools))
 	hasTemporarySkip := false
@@ -291,6 +293,11 @@ func (p *CloudProvider) selectPoolForCreate(pools []client.WorkerPool, requested
 		}
 		if pool.Status != "ready" {
 			log.Debug().Str("pool_id", pool.ID).Str("status", pool.Status).Msg("create: skipping pool, not ready")
+			hasTemporarySkip = true
+			continue
+		}
+		if time.Since(pool.CreatedAt) < poolMinAge {
+			log.Debug().Str("pool_id", pool.ID).Time("created_at", pool.CreatedAt).Msg("create: skipping pool, too recently created")
 			hasTemporarySkip = true
 			continue
 		}
