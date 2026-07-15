@@ -71,7 +71,7 @@ func (p *CloudProvider) Create(ctx context.Context, nodeClaim *karpv1.NodeClaim)
 		Strs("requested_instance_types", requestedTypes).
 		Msg("create: fetched pools")
 
-	pool, err := p.selectPoolForCreate(pools, requestedTypes)
+	pool, err := p.selectPoolForCreate(ctx, pools, requestedTypes)
 	if err != nil {
 		log.Warn().Err(err).
 			Str("nodeclaim", nodeClaim.Name).
@@ -92,12 +92,8 @@ func (p *CloudProvider) Create(ctx context.Context, nodeClaim *karpv1.NodeClaim)
 		return nil, fmt.Errorf("resolving capacity for pool %s: %w", pool.ID, err)
 	}
 
+	// Availability was already confirmed by selectPoolForCreate.
 	targetCount := pool.NodeCount + 1
-
-	if err := p.nirvanaClient.CheckPoolUpdateAvailability(ctx, p.clusterID, pool.ID, targetCount); err != nil {
-		log.Warn().Err(err).Str("pool_id", pool.ID).Int("target_count", targetCount).Msg("create: no availability for scale-up")
-		return nil, cloudprovider.NewInsufficientCapacityError(fmt.Errorf("no availability for pool %s: %w", pool.ID, err))
-	}
 
 	log.Info().
 		Str("pool_id", pool.ID).
@@ -286,17 +282,20 @@ func (p *CloudProvider) GetSupportedNodeClasses() []status.Object {
 
 var errPoolsTemporarilyUnavailable = fmt.Errorf("all candidate pools are temporarily unavailable")
 
-// selectPoolForCreate returns a ready pool for the cheapest eligible instance
-// type. requestedTypes is ordered cheapest-first; the first type with a ready
-// pool wins, so an unavailable cheaper type never blocks a costlier one that is
-// available. An empty requestedTypes means unconstrained — any ready pool is
+// selectPoolForCreate returns a pool that is ready and confirmed to have
+// scale-up availability, for the cheapest eligible instance type.
+// requestedTypes is ordered cheapest-first; a pool that is not ready or whose
+// availability check is rejected advances to the next pool or instance type, so
+// an unavailable cheaper option never blocks a costlier one that can be
+// launched. An empty requestedTypes means unconstrained — any ready pool is
 // eligible.
-func (p *CloudProvider) selectPoolForCreate(pools []client.WorkerPool, requestedTypes []string) (*client.WorkerPool, error) {
+func (p *CloudProvider) selectPoolForCreate(ctx context.Context, pools []client.WorkerPool, requestedTypes []string) (*client.WorkerPool, error) {
 	order := requestedTypes
 	if len(order) == 0 {
 		order = []string{""} // unconstrained: single match-any pass
 	}
 	hasTemporarySkip := false
+	var lastAvailErr error
 
 	for _, requestedType := range order {
 		candidates := make([]int, 0, len(pools))
@@ -313,17 +312,25 @@ func (p *CloudProvider) selectPoolForCreate(pools []client.WorkerPool, requested
 			candidates = append(candidates, i)
 		}
 
-		if len(candidates) == 0 {
-			continue
-		}
-
 		sort.Slice(candidates, func(a, b int) bool {
 			return pools[candidates[a]].NodeCount < pools[candidates[b]].NodeCount
 		})
 
-		return &pools[candidates[0]], nil
+		for _, i := range candidates {
+			pool := &pools[i]
+			targetCount := pool.NodeCount + 1
+			if err := p.nirvanaClient.CheckPoolUpdateAvailability(ctx, p.clusterID, pool.ID, targetCount); err != nil {
+				log.Warn().Err(err).Str("pool_id", pool.ID).Int("target_count", targetCount).Msg("create: no availability, trying next pool")
+				lastAvailErr = err
+				continue
+			}
+			return pool, nil
+		}
 	}
 
+	if lastAvailErr != nil {
+		return nil, cloudprovider.NewInsufficientCapacityError(fmt.Errorf("no pool with available capacity for instance types %v: %w", requestedTypes, lastAvailErr))
+	}
 	if hasTemporarySkip {
 		return nil, errPoolsTemporarilyUnavailable
 	}
