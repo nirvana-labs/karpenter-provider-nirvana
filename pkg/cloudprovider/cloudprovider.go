@@ -44,17 +44,25 @@ func (p *CloudProvider) Name() string {
 }
 
 func (p *CloudProvider) Create(ctx context.Context, nodeClaim *karpv1.NodeClaim) (*karpv1.NodeClaim, error) {
-	requestedType := instanceTypeFromRequirements(nodeClaim)
+	candidates := instanceTypeValues(nodeClaim)
 
 	log.Info().
 		Str("nodeclaim", nodeClaim.Name).
-		Str("requested_instance_type", requestedType).
+		Strs("candidate_instance_types", candidates).
 		Msg("create: received nodeclaim")
 
 	pools, err := p.nirvanaClient.ListPools(ctx, p.clusterID)
 	if err != nil {
 		return nil, fmt.Errorf("listing pools: %w", err)
 	}
+
+	specs, err := p.nirvanaClient.ListInstanceTypes(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("listing instance types: %w", err)
+	}
+
+	// Honor Karpenter's contract of launching the cheapest compatible offering.
+	requestedType := cheapestInstanceType(candidates, specs)
 
 	log.Info().
 		Int("pool_count", len(pools)).
@@ -77,10 +85,6 @@ func (p *CloudProvider) Create(ctx context.Context, nodeClaim *karpv1.NodeClaim)
 		Int("current_count", pool.NodeCount).
 		Msg("create: selected pool")
 
-	specs, err := p.nirvanaClient.ListInstanceTypes(ctx)
-	if err != nil {
-		return nil, fmt.Errorf("listing instance types: %w", err)
-	}
 	capacity, err := capacityFromSpec(pool.NodeConfig.InstanceType, specs, pool.NodeConfig.BootVolume.Size)
 	if err != nil {
 		return nil, fmt.Errorf("resolving capacity for pool %s: %w", pool.ID, err)
@@ -369,13 +373,46 @@ func (p *CloudProvider) waitForOperation(ctx context.Context, poolID, operationI
 	return op, nil
 }
 
-func instanceTypeFromRequirements(nodeClaim *karpv1.NodeClaim) string {
+// instanceTypeValues returns the instance types the NodeClaim is constrained to,
+// or nil when it is unconstrained.
+func instanceTypeValues(nodeClaim *karpv1.NodeClaim) []string {
 	for _, req := range nodeClaim.Spec.Requirements {
-		if req.Key == corev1.LabelInstanceTypeStable && req.Operator == corev1.NodeSelectorOpIn && len(req.Values) > 0 {
-			return req.Values[0]
+		if req.Key == corev1.LabelInstanceTypeStable && req.Operator == corev1.NodeSelectorOpIn {
+			return req.Values
 		}
 	}
-	return ""
+	return nil
+}
+
+// cheapestInstanceType returns the lowest-priced candidate that has a known
+// spec. It returns "" when candidates is empty (unconstrained — any pool is
+// eligible), and falls back to the first candidate when none have specs so a
+// constrained NodeClaim never widens to matching any pool.
+func cheapestInstanceType(candidates []string, specs []client.InstanceTypeSpec) string {
+	if len(candidates) == 0 {
+		return ""
+	}
+
+	priceByName := make(map[string]float64, len(specs))
+	for _, s := range specs {
+		priceByName[s.Name] = computePrice(s.VCPU, s.MemoryGB)
+	}
+
+	best := ""
+	var bestPrice float64
+	for _, name := range candidates {
+		price, ok := priceByName[name]
+		if !ok {
+			continue
+		}
+		if best == "" || price < bestPrice {
+			best, bestPrice = name, price
+		}
+	}
+	if best == "" {
+		return candidates[0]
+	}
+	return best
 }
 
 func parseProviderID(providerID string) (clusterID, poolID, nodeClaimName string, err error) {
