@@ -41,34 +41,55 @@ func taintKey(t corev1.Taint) [3]string {
 	return [3]string{t.Key, t.Value, string(t.Effect)}
 }
 
-// poolTaintsMatch reports whether a pool whose nodes carry poolTaints is an
-// exact match for a NodeClaim that expects the taint set `expected`.
+// isHardTaint reports whether a taint actually blocks scheduling. Only
+// NoSchedule and NoExecute keep an untolerating pod off a node; PreferNoSchedule
+// is a soft preference the scheduler is free to override, so a pod can still be
+// placed on a node carrying only PreferNoSchedule taints. We therefore ignore
+// PreferNoSchedule when deciding whether a pool is safe to scale.
+func isHardTaint(effect corev1.TaintEffect) bool {
+	return effect == corev1.TaintEffectNoSchedule || effect == corev1.TaintEffectNoExecute
+}
+
+// poolTaintsMatch reports whether a pool whose nodes carry poolTaints is a safe
+// match for a NodeClaim that expects the taint set `expected`.
 //
-// The match must be exact in both directions: a pool carrying a taint the
-// NodeClaim doesn't expect would reject pods Karpenter believes fit (the churn
-// bug), and a pool missing a taint the NodeClaim expects would produce a node
-// that violates the NodePool contract. Unparseable pool taints fail the match
-// so we never scale a pool we can't reason about.
+// Only hard taints (NoSchedule / NoExecute) participate: those are the ones that
+// can reject a pod, so the pool's hard taints must exactly equal the NodeClaim's
+// expected hard taints. A pool carrying an unexpected hard taint would reject
+// pods Karpenter believes fit (the churn bug), and a pool missing an expected
+// hard taint would produce a node that violates the NodePool contract.
+// PreferNoSchedule taints never block scheduling, so they are ignored on both
+// sides — a pool whose only taints are PreferNoSchedule matches an untainted
+// NodeClaim. Unparseable pool taints fail the match so we never scale a pool we
+// can't reason about.
 func poolTaintsMatch(poolTaints []string, expected []corev1.Taint) bool {
-	if len(poolTaints) != len(expected) {
-		return false
-	}
-
-	want := make(map[[3]string]struct{}, len(expected))
-	for _, t := range expected {
-		want[taintKey(t)] = struct{}{}
-	}
-
+	have := make(map[[3]string]struct{}, len(poolTaints))
 	for _, raw := range poolTaints {
 		t, err := parsePoolTaint(raw)
 		if err != nil {
 			return false
 		}
-		if _, ok := want[taintKey(t)]; !ok {
-			return false
+		if !isHardTaint(t.Effect) {
+			continue
 		}
-		delete(want, taintKey(t))
+		have[taintKey(t)] = struct{}{}
 	}
 
-	return len(want) == 0
+	want := make(map[[3]string]struct{}, len(expected))
+	for _, t := range expected {
+		if !isHardTaint(t.Effect) {
+			continue
+		}
+		want[taintKey(t)] = struct{}{}
+	}
+
+	if len(have) != len(want) {
+		return false
+	}
+	for k := range have {
+		if _, ok := want[k]; !ok {
+			return false
+		}
+	}
+	return true
 }

@@ -74,6 +74,22 @@ func TestPoolTaintsMatch(t *testing.T) {
 	if poolTaintsMatch([]string{"garbage"}, nil) {
 		t.Error("unparseable taint must not match")
 	}
+	// PreferNoSchedule is soft — it never blocks scheduling — so a pool whose
+	// only taint is PreferNoSchedule matches a NodeClaim that expects no taints.
+	if !poolTaintsMatch([]string{"dedicated=gpu:PreferNoSchedule"}, nil) {
+		t.Error("PreferNoSchedule-only pool should match empty expectation")
+	}
+	// A hard taint alongside a soft one still blocks: only the hard taint counts,
+	// and it doesn't match an empty expectation.
+	if poolTaintsMatch([]string{"soft=x:PreferNoSchedule", "dedicated=gpu:NoSchedule"}, nil) {
+		t.Error("hard taint must still block even when a soft taint is present")
+	}
+	// A PreferNoSchedule taint is ignored, so it doesn't need to be mirrored on
+	// the pool to match a NodeClaim that carries one.
+	softExpect := corev1.Taint{Key: "soft", Value: "x", Effect: corev1.TaintEffectPreferNoSchedule}
+	if !poolTaintsMatch([]string{"dedicated=gpu:NoSchedule"}, []corev1.Taint{softExpect, gpu}) {
+		t.Error("PreferNoSchedule in expectation should be ignored when matching hard taints")
+	}
 }
 
 func TestEligiblePoolsInCostOrderTaintAware(t *testing.T) {
