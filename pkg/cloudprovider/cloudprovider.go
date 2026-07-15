@@ -48,7 +48,9 @@ func (p *CloudProvider) Create(ctx context.Context, nodeClaim *karpv1.NodeClaim)
 
 	log.Info().
 		Str("nodeclaim", nodeClaim.Name).
+		Str("nodepool", nodeClaim.Labels[karpv1.NodePoolLabelKey]).
 		Strs("candidate_instance_types", candidates).
+		Strs("nodeclaim_taints", formatTaints(nodeClaim.Spec.Taints)).
 		Msg("create: received nodeclaim")
 
 	pools, err := p.nirvanaClient.ListPools(ctx, p.clusterID)
@@ -71,7 +73,7 @@ func (p *CloudProvider) Create(ctx context.Context, nodeClaim *karpv1.NodeClaim)
 		Strs("requested_instance_types", requestedTypes).
 		Msg("create: fetched pools")
 
-	pool, err := p.selectPoolForCreate(ctx, pools, requestedTypes)
+	pool, err := p.selectPoolForCreate(ctx, pools, requestedTypes, nodeClaim.Spec.Taints)
 	if err != nil {
 		log.Warn().Err(err).
 			Str("nodeclaim", nodeClaim.Name).
@@ -85,6 +87,8 @@ func (p *CloudProvider) Create(ctx context.Context, nodeClaim *karpv1.NodeClaim)
 		Str("pool_name", pool.Name).
 		Str("instance_type", pool.NodeConfig.InstanceType).
 		Int("current_count", pool.NodeCount).
+		Strs("pool_taints", pool.NodeConfig.Taints).
+		Strs("nodeclaim_taints", formatTaints(nodeClaim.Spec.Taints)).
 		Msg("create: selected pool")
 
 	capacity, err := capacityFromSpec(pool.NodeConfig.InstanceType, specs, pool.NodeConfig.BootVolume.Size)
@@ -282,26 +286,64 @@ func (p *CloudProvider) GetSupportedNodeClasses() []status.Object {
 
 var errPoolsTemporarilyUnavailable = fmt.Errorf("all candidate pools are temporarily unavailable")
 
-// selectPoolForCreate returns a pool that is ready and confirmed to have
-// scale-up availability, for the cheapest eligible instance type.
-// requestedTypes is ordered cheapest-first; a pool that is not ready or whose
-// availability check is rejected advances to the next pool or instance type, so
-// an unavailable cheaper option never blocks a costlier one that can be
-// launched. An empty requestedTypes means unconstrained — any ready pool is
-// eligible.
-func (p *CloudProvider) selectPoolForCreate(ctx context.Context, pools []client.WorkerPool, requestedTypes []string) (*client.WorkerPool, error) {
+// selectPoolForCreate returns a pool that is ready, taint-matched, and
+// confirmed to have scale-up availability, for the cheapest eligible instance
+// type. requestedTypes is ordered cheapest-first; a pool that is not ready,
+// whose taints don't match, or whose availability check is rejected advances to
+// the next pool or instance type, so an unavailable cheaper option never blocks
+// a costlier one that can be launched. An empty requestedTypes means
+// unconstrained — any ready pool is eligible.
+func (p *CloudProvider) selectPoolForCreate(ctx context.Context, pools []client.WorkerPool, requestedTypes []string, expectedTaints []corev1.Taint) (*client.WorkerPool, error) {
+	candidates, hasTemporarySkip := eligiblePoolsInCostOrder(pools, requestedTypes, expectedTaints)
+
+	var lastAvailErr error
+	for _, i := range candidates {
+		pool := &pools[i]
+		targetCount := pool.NodeCount + 1
+		if err := p.nirvanaClient.CheckPoolUpdateAvailability(ctx, p.clusterID, pool.ID, targetCount); err != nil {
+			log.Warn().Err(err).Str("pool_id", pool.ID).Int("target_count", targetCount).Msg("create: no availability, trying next pool")
+			lastAvailErr = err
+			continue
+		}
+		return pool, nil
+	}
+
+	if lastAvailErr != nil {
+		return nil, cloudprovider.NewInsufficientCapacityError(fmt.Errorf("no pool with available capacity for instance types %v: %w", requestedTypes, lastAvailErr))
+	}
+	if hasTemporarySkip {
+		return nil, errPoolsTemporarilyUnavailable
+	}
+	return nil, cloudprovider.NewInsufficientCapacityError(fmt.Errorf("no eligible pools available for instance types %v", requestedTypes))
+}
+
+// eligiblePoolsInCostOrder returns the indices of pools that match an allowed
+// instance type, carry exactly the taints the NodeClaim expects, and are ready
+// — grouped by requestedTypes (which the caller orders cheapest-first) and,
+// within a type, ordered by fewest nodes. An empty requestedTypes means
+// unconstrained: any ready, taint-matched pool is eligible. hasTemporarySkip
+// reports whether a pool was skipped only because it was not yet ready, so the
+// caller can distinguish "retry later" from "no eligible pool".
+func eligiblePoolsInCostOrder(pools []client.WorkerPool, requestedTypes []string, expectedTaints []corev1.Taint) (ordered []int, hasTemporarySkip bool) {
 	order := requestedTypes
 	if len(order) == 0 {
 		order = []string{""} // unconstrained: single match-any pass
 	}
-	hasTemporarySkip := false
-	var lastAvailErr error
 
 	for _, requestedType := range order {
 		candidates := make([]int, 0, len(pools))
 		for i, pool := range pools {
 			if requestedType != "" && pool.NodeConfig.InstanceType != requestedType {
 				log.Debug().Str("pool_id", pool.ID).Str("pool_type", pool.NodeConfig.InstanceType).Str("requested", requestedType).Msg("create: skipping pool, instance type mismatch")
+				continue
+			}
+			// Only scale a pool whose taints exactly match what the NodeClaim
+			// expects. Karpenter's scheduler already decided this pod tolerates
+			// the NodeClaim's taints; scaling a pool with a different taint set
+			// would produce a node the pod can't schedule onto, which Karpenter
+			// then tears down and retries forever.
+			if !poolTaintsMatch(pool.NodeConfig.Taints, expectedTaints) {
+				log.Debug().Str("pool_id", pool.ID).Strs("pool_taints", pool.NodeConfig.Taints).Strs("nodeclaim_taints", formatTaints(expectedTaints)).Msg("create: skipping pool, taint mismatch")
 				continue
 			}
 			if pool.Status != "ready" {
@@ -315,26 +357,22 @@ func (p *CloudProvider) selectPoolForCreate(ctx context.Context, pools []client.
 		sort.Slice(candidates, func(a, b int) bool {
 			return pools[candidates[a]].NodeCount < pools[candidates[b]].NodeCount
 		})
-
-		for _, i := range candidates {
-			pool := &pools[i]
-			targetCount := pool.NodeCount + 1
-			if err := p.nirvanaClient.CheckPoolUpdateAvailability(ctx, p.clusterID, pool.ID, targetCount); err != nil {
-				log.Warn().Err(err).Str("pool_id", pool.ID).Int("target_count", targetCount).Msg("create: no availability, trying next pool")
-				lastAvailErr = err
-				continue
-			}
-			return pool, nil
-		}
+		ordered = append(ordered, candidates...)
 	}
 
-	if lastAvailErr != nil {
-		return nil, cloudprovider.NewInsufficientCapacityError(fmt.Errorf("no pool with available capacity for instance types %v: %w", requestedTypes, lastAvailErr))
+	eligibleIDs := make([]string, len(ordered))
+	for j, i := range ordered {
+		eligibleIDs[j] = pools[i].ID
 	}
-	if hasTemporarySkip {
-		return nil, errPoolsTemporarilyUnavailable
-	}
-	return nil, cloudprovider.NewInsufficientCapacityError(fmt.Errorf("no eligible pools available for instance types %v", requestedTypes))
+	log.Info().
+		Int("pool_count", len(pools)).
+		Strs("nodeclaim_taints", formatTaints(expectedTaints)).
+		Strs("requested_instance_types", requestedTypes).
+		Strs("eligible_pools_in_order", eligibleIDs).
+		Bool("has_temporary_skip", hasTemporarySkip).
+		Msg("create: pool eligibility resolved")
+
+	return ordered, hasTemporarySkip
 }
 
 func (p *CloudProvider) latestNode(ctx context.Context, poolID string, expectedCount int) (*client.WorkerNode, error) {

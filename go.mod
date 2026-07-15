@@ -4,7 +4,7 @@ go 1.26
 
 require (
 	github.com/awslabs/operatorpkg v0.0.0-20251222193911-34e9a1898737
-	github.com/nirvana-labs/nirvana-go v1.77.2
+	github.com/nirvana-labs/nirvana-go v1.90.1
 	github.com/rs/zerolog v1.35.1
 	k8s.io/api v0.35.0
 	k8s.io/apimachinery v0.35.0
