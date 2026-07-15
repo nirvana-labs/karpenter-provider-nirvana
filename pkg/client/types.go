@@ -17,6 +17,11 @@ type WorkerPool struct {
 type NodeConfig struct {
 	InstanceType string     `json:"instance_type"`
 	BootVolume   BootVolume `json:"boot_volume"`
+	// Taints are the Kubernetes taints the Nirvana pool stamps onto every node
+	// it provisions, each formatted as "key=value:Effect" (value may be empty:
+	// "key=:Effect"). Karpenter must be told about these so it only schedules
+	// tolerating pods onto this pool's nodes.
+	Taints []string `json:"taints"`
 }
 
 type BootVolume struct {

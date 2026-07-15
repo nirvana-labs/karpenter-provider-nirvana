@@ -71,7 +71,7 @@ func (p *CloudProvider) Create(ctx context.Context, nodeClaim *karpv1.NodeClaim)
 		Strs("requested_instance_types", requestedTypes).
 		Msg("create: fetched pools")
 
-	pool, err := p.selectPoolForCreate(ctx, pools, requestedTypes)
+	pool, err := p.selectPoolForCreate(ctx, pools, requestedTypes, nodeClaim.Spec.Taints)
 	if err != nil {
 		log.Warn().Err(err).
 			Str("nodeclaim", nodeClaim.Name).
@@ -282,14 +282,14 @@ func (p *CloudProvider) GetSupportedNodeClasses() []status.Object {
 
 var errPoolsTemporarilyUnavailable = fmt.Errorf("all candidate pools are temporarily unavailable")
 
-// selectPoolForCreate returns a pool that is ready and confirmed to have
-// scale-up availability, for the cheapest eligible instance type.
-// requestedTypes is ordered cheapest-first; a pool that is not ready or whose
-// availability check is rejected advances to the next pool or instance type, so
-// an unavailable cheaper option never blocks a costlier one that can be
-// launched. An empty requestedTypes means unconstrained — any ready pool is
-// eligible.
-func (p *CloudProvider) selectPoolForCreate(ctx context.Context, pools []client.WorkerPool, requestedTypes []string) (*client.WorkerPool, error) {
+// selectPoolForCreate returns a pool that is ready, taint-matched, and
+// confirmed to have scale-up availability, for the cheapest eligible instance
+// type. requestedTypes is ordered cheapest-first; a pool that is not ready,
+// whose taints don't match, or whose availability check is rejected advances to
+// the next pool or instance type, so an unavailable cheaper option never blocks
+// a costlier one that can be launched. An empty requestedTypes means
+// unconstrained — any ready pool is eligible.
+func (p *CloudProvider) selectPoolForCreate(ctx context.Context, pools []client.WorkerPool, requestedTypes []string, expectedTaints []corev1.Taint) (*client.WorkerPool, error) {
 	order := requestedTypes
 	if len(order) == 0 {
 		order = []string{""} // unconstrained: single match-any pass
@@ -302,6 +302,15 @@ func (p *CloudProvider) selectPoolForCreate(ctx context.Context, pools []client.
 		for i, pool := range pools {
 			if requestedType != "" && pool.NodeConfig.InstanceType != requestedType {
 				log.Debug().Str("pool_id", pool.ID).Str("pool_type", pool.NodeConfig.InstanceType).Str("requested", requestedType).Msg("create: skipping pool, instance type mismatch")
+				continue
+			}
+			// Only scale a pool whose taints exactly match what the NodeClaim
+			// expects. Karpenter's scheduler already decided this pod tolerates
+			// the NodeClaim's taints; scaling a pool with a different taint set
+			// would produce a node the pod can't schedule onto, which Karpenter
+			// then tears down and retries forever.
+			if !poolTaintsMatch(pool.NodeConfig.Taints, expectedTaints) {
+				log.Debug().Str("pool_id", pool.ID).Strs("pool_taints", pool.NodeConfig.Taints).Msg("create: skipping pool, taint mismatch")
 				continue
 			}
 			if pool.Status != "ready" {

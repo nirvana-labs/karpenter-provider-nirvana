@@ -71,6 +71,7 @@ func convertPool(p nks.NKSNodePool) WorkerPool {
 			BootVolume: BootVolume{
 				Size: int(p.NodeConfig.BootVolume.Size),
 			},
+			Taints: p.NodeConfig.Taints,
 		},
 		Tags:      p.Tags,
 		CreatedAt: p.CreatedAt,
