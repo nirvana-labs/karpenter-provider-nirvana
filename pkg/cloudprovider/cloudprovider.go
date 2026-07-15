@@ -44,11 +44,11 @@ func (p *CloudProvider) Name() string {
 }
 
 func (p *CloudProvider) Create(ctx context.Context, nodeClaim *karpv1.NodeClaim) (*karpv1.NodeClaim, error) {
-	requestedType := instanceTypeFromRequirements(nodeClaim)
+	candidates := instanceTypeValues(nodeClaim)
 
 	log.Info().
 		Str("nodeclaim", nodeClaim.Name).
-		Str("requested_instance_type", requestedType).
+		Strs("candidate_instance_types", candidates).
 		Msg("create: received nodeclaim")
 
 	pools, err := p.nirvanaClient.ListPools(ctx, p.clusterID)
@@ -56,16 +56,26 @@ func (p *CloudProvider) Create(ctx context.Context, nodeClaim *karpv1.NodeClaim)
 		return nil, fmt.Errorf("listing pools: %w", err)
 	}
 
+	specs, err := p.nirvanaClient.ListInstanceTypes(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("listing instance types: %w", err)
+	}
+
+	// Honor Karpenter's contract of launching the cheapest compatible offering,
+	// ordered cheapest-first so an unavailable cheaper type falls back to a
+	// costlier one that has a ready pool.
+	requestedTypes := rankInstanceTypesByCost(candidates, specs)
+
 	log.Info().
 		Int("pool_count", len(pools)).
-		Str("requested_instance_type", requestedType).
+		Strs("requested_instance_types", requestedTypes).
 		Msg("create: fetched pools")
 
-	pool, err := p.selectPoolForCreate(pools, requestedType)
+	pool, err := p.selectPoolForCreate(ctx, pools, requestedTypes)
 	if err != nil {
 		log.Warn().Err(err).
 			Str("nodeclaim", nodeClaim.Name).
-			Str("requested_instance_type", requestedType).
+			Strs("requested_instance_types", requestedTypes).
 			Msg("create: no eligible pool found")
 		return nil, err
 	}
@@ -77,21 +87,13 @@ func (p *CloudProvider) Create(ctx context.Context, nodeClaim *karpv1.NodeClaim)
 		Int("current_count", pool.NodeCount).
 		Msg("create: selected pool")
 
-	specs, err := p.nirvanaClient.ListInstanceTypes(ctx)
-	if err != nil {
-		return nil, fmt.Errorf("listing instance types: %w", err)
-	}
 	capacity, err := capacityFromSpec(pool.NodeConfig.InstanceType, specs, pool.NodeConfig.BootVolume.Size)
 	if err != nil {
 		return nil, fmt.Errorf("resolving capacity for pool %s: %w", pool.ID, err)
 	}
 
+	// Availability was already confirmed by selectPoolForCreate.
 	targetCount := pool.NodeCount + 1
-
-	if err := p.nirvanaClient.CheckPoolUpdateAvailability(ctx, p.clusterID, pool.ID, targetCount); err != nil {
-		log.Warn().Err(err).Str("pool_id", pool.ID).Int("target_count", targetCount).Msg("create: no availability for scale-up")
-		return nil, cloudprovider.NewInsufficientCapacityError(fmt.Errorf("no availability for pool %s: %w", pool.ID, err))
-	}
 
 	log.Info().
 		Str("pool_id", pool.ID).
@@ -280,35 +282,59 @@ func (p *CloudProvider) GetSupportedNodeClasses() []status.Object {
 
 var errPoolsTemporarilyUnavailable = fmt.Errorf("all candidate pools are temporarily unavailable")
 
-func (p *CloudProvider) selectPoolForCreate(pools []client.WorkerPool, requestedType string) (*client.WorkerPool, error) {
-	candidates := make([]int, 0, len(pools))
+// selectPoolForCreate returns a pool that is ready and confirmed to have
+// scale-up availability, for the cheapest eligible instance type.
+// requestedTypes is ordered cheapest-first; a pool that is not ready or whose
+// availability check is rejected advances to the next pool or instance type, so
+// an unavailable cheaper option never blocks a costlier one that can be
+// launched. An empty requestedTypes means unconstrained — any ready pool is
+// eligible.
+func (p *CloudProvider) selectPoolForCreate(ctx context.Context, pools []client.WorkerPool, requestedTypes []string) (*client.WorkerPool, error) {
+	order := requestedTypes
+	if len(order) == 0 {
+		order = []string{""} // unconstrained: single match-any pass
+	}
 	hasTemporarySkip := false
+	var lastAvailErr error
 
-	for i, pool := range pools {
-		if requestedType != "" && pool.NodeConfig.InstanceType != requestedType {
-			log.Debug().Str("pool_id", pool.ID).Str("pool_type", pool.NodeConfig.InstanceType).Str("requested", requestedType).Msg("create: skipping pool, instance type mismatch")
-			continue
+	for _, requestedType := range order {
+		candidates := make([]int, 0, len(pools))
+		for i, pool := range pools {
+			if requestedType != "" && pool.NodeConfig.InstanceType != requestedType {
+				log.Debug().Str("pool_id", pool.ID).Str("pool_type", pool.NodeConfig.InstanceType).Str("requested", requestedType).Msg("create: skipping pool, instance type mismatch")
+				continue
+			}
+			if pool.Status != "ready" {
+				log.Debug().Str("pool_id", pool.ID).Str("status", pool.Status).Msg("create: skipping pool, not ready")
+				hasTemporarySkip = true
+				continue
+			}
+			candidates = append(candidates, i)
 		}
-		if pool.Status != "ready" {
-			log.Debug().Str("pool_id", pool.ID).Str("status", pool.Status).Msg("create: skipping pool, not ready")
-			hasTemporarySkip = true
-			continue
+
+		sort.Slice(candidates, func(a, b int) bool {
+			return pools[candidates[a]].NodeCount < pools[candidates[b]].NodeCount
+		})
+
+		for _, i := range candidates {
+			pool := &pools[i]
+			targetCount := pool.NodeCount + 1
+			if err := p.nirvanaClient.CheckPoolUpdateAvailability(ctx, p.clusterID, pool.ID, targetCount); err != nil {
+				log.Warn().Err(err).Str("pool_id", pool.ID).Int("target_count", targetCount).Msg("create: no availability, trying next pool")
+				lastAvailErr = err
+				continue
+			}
+			return pool, nil
 		}
-		candidates = append(candidates, i)
 	}
 
-	if len(candidates) == 0 {
-		if hasTemporarySkip {
-			return nil, errPoolsTemporarilyUnavailable
-		}
-		return nil, cloudprovider.NewInsufficientCapacityError(fmt.Errorf("no eligible pools available for instance type %s", requestedType))
+	if lastAvailErr != nil {
+		return nil, cloudprovider.NewInsufficientCapacityError(fmt.Errorf("no pool with available capacity for instance types %v: %w", requestedTypes, lastAvailErr))
 	}
-
-	sort.Slice(candidates, func(a, b int) bool {
-		return pools[candidates[a]].NodeCount < pools[candidates[b]].NodeCount
-	})
-
-	return &pools[candidates[0]], nil
+	if hasTemporarySkip {
+		return nil, errPoolsTemporarilyUnavailable
+	}
+	return nil, cloudprovider.NewInsufficientCapacityError(fmt.Errorf("no eligible pools available for instance types %v", requestedTypes))
 }
 
 func (p *CloudProvider) latestNode(ctx context.Context, poolID string, expectedCount int) (*client.WorkerNode, error) {
@@ -369,13 +395,45 @@ func (p *CloudProvider) waitForOperation(ctx context.Context, poolID, operationI
 	return op, nil
 }
 
-func instanceTypeFromRequirements(nodeClaim *karpv1.NodeClaim) string {
+// instanceTypeValues returns the instance types the NodeClaim is constrained to,
+// or nil when it is unconstrained.
+func instanceTypeValues(nodeClaim *karpv1.NodeClaim) []string {
 	for _, req := range nodeClaim.Spec.Requirements {
-		if req.Key == corev1.LabelInstanceTypeStable && req.Operator == corev1.NodeSelectorOpIn && len(req.Values) > 0 {
-			return req.Values[0]
+		if req.Key == corev1.LabelInstanceTypeStable && req.Operator == corev1.NodeSelectorOpIn {
+			return req.Values
 		}
 	}
-	return ""
+	return nil
+}
+
+// rankInstanceTypesByCost orders candidates cheapest-first. Candidates with a
+// known spec sort by price ahead of those without; unknown-spec candidates keep
+// their original relative order and trail the priced ones, so a constrained
+// NodeClaim never widens to matching any pool. Returns nil when candidates is
+// empty (unconstrained — any pool is eligible).
+func rankInstanceTypesByCost(candidates []string, specs []client.InstanceTypeSpec) []string {
+	if len(candidates) == 0 {
+		return nil
+	}
+
+	priceByName := make(map[string]float64, len(specs))
+	for _, s := range specs {
+		priceByName[s.Name] = computePrice(s.VCPU, s.MemoryGB)
+	}
+
+	ranked := append([]string(nil), candidates...)
+	sort.SliceStable(ranked, func(a, b int) bool {
+		priceA, okA := priceByName[ranked[a]]
+		priceB, okB := priceByName[ranked[b]]
+		if okA != okB {
+			return okA // priced candidates sort ahead of unknown ones
+		}
+		if !okA {
+			return false // both unknown: preserve original order
+		}
+		return priceA < priceB
+	})
+	return ranked
 }
 
 func parseProviderID(providerID string) (clusterID, poolID, nodeClaimName string, err error) {

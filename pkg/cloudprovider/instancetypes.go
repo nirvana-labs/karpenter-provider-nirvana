@@ -15,7 +15,21 @@ import (
 const (
 	overheadCPUMillis = 100
 	overheadMemoryMiB = 256
+
+	// Nirvana does not expose per-instance-type pricing yet, so we synthesize a
+	// relative hourly price from vCPU and memory. The absolute value is
+	// meaningless; only the ordering matters — it lets Karpenter right-size by
+	// preferring the smallest instance type that fits a pending pod instead of
+	// treating every offering as free (Price: 0) and tie-breaking arbitrarily.
+	pricePerVCPUHour   = 0.0400
+	pricePerMemoryGBHr = 0.0050
 )
+
+// computePrice returns a synthetic relative price that increases monotonically
+// with vCPU and memory.
+func computePrice(vcpu, memoryGB int) float64 {
+	return float64(vcpu)*pricePerVCPUHour + float64(memoryGB)*pricePerMemoryGBHr
+}
 
 func PoolsToInstanceTypes(pools []client.WorkerPool, instanceTypeSpecs map[string]client.InstanceTypeSpec, region string) []*cloudprovider.InstanceType {
 	seen := make(map[string]bool)
@@ -57,7 +71,7 @@ func PoolsToInstanceTypes(pools []client.WorkerPool, instanceTypeSpecs map[strin
 						scheduling.NewRequirement(karpv1.CapacityTypeLabelKey, corev1.NodeSelectorOpIn, karpv1.CapacityTypeOnDemand),
 						scheduling.NewRequirement(corev1.LabelTopologyZone, corev1.NodeSelectorOpIn, region),
 					),
-					Price:     0,
+					Price:     computePrice(spec.VCPU, spec.MemoryGB),
 					Available: true,
 				},
 			},
