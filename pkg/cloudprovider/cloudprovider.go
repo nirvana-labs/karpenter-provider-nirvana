@@ -61,19 +61,21 @@ func (p *CloudProvider) Create(ctx context.Context, nodeClaim *karpv1.NodeClaim)
 		return nil, fmt.Errorf("listing instance types: %w", err)
 	}
 
-	// Honor Karpenter's contract of launching the cheapest compatible offering.
-	requestedType := cheapestInstanceType(candidates, specs)
+	// Honor Karpenter's contract of launching the cheapest compatible offering,
+	// ordered cheapest-first so an unavailable cheaper type falls back to a
+	// costlier one that has a ready pool.
+	requestedTypes := rankInstanceTypesByCost(candidates, specs)
 
 	log.Info().
 		Int("pool_count", len(pools)).
-		Str("requested_instance_type", requestedType).
+		Strs("requested_instance_types", requestedTypes).
 		Msg("create: fetched pools")
 
-	pool, err := p.selectPoolForCreate(pools, requestedType)
+	pool, err := p.selectPoolForCreate(pools, requestedTypes)
 	if err != nil {
 		log.Warn().Err(err).
 			Str("nodeclaim", nodeClaim.Name).
-			Str("requested_instance_type", requestedType).
+			Strs("requested_instance_types", requestedTypes).
 			Msg("create: no eligible pool found")
 		return nil, err
 	}
@@ -284,35 +286,48 @@ func (p *CloudProvider) GetSupportedNodeClasses() []status.Object {
 
 var errPoolsTemporarilyUnavailable = fmt.Errorf("all candidate pools are temporarily unavailable")
 
-func (p *CloudProvider) selectPoolForCreate(pools []client.WorkerPool, requestedType string) (*client.WorkerPool, error) {
-	candidates := make([]int, 0, len(pools))
+// selectPoolForCreate returns a ready pool for the cheapest eligible instance
+// type. requestedTypes is ordered cheapest-first; the first type with a ready
+// pool wins, so an unavailable cheaper type never blocks a costlier one that is
+// available. An empty requestedTypes means unconstrained — any ready pool is
+// eligible.
+func (p *CloudProvider) selectPoolForCreate(pools []client.WorkerPool, requestedTypes []string) (*client.WorkerPool, error) {
+	order := requestedTypes
+	if len(order) == 0 {
+		order = []string{""} // unconstrained: single match-any pass
+	}
 	hasTemporarySkip := false
 
-	for i, pool := range pools {
-		if requestedType != "" && pool.NodeConfig.InstanceType != requestedType {
-			log.Debug().Str("pool_id", pool.ID).Str("pool_type", pool.NodeConfig.InstanceType).Str("requested", requestedType).Msg("create: skipping pool, instance type mismatch")
+	for _, requestedType := range order {
+		candidates := make([]int, 0, len(pools))
+		for i, pool := range pools {
+			if requestedType != "" && pool.NodeConfig.InstanceType != requestedType {
+				log.Debug().Str("pool_id", pool.ID).Str("pool_type", pool.NodeConfig.InstanceType).Str("requested", requestedType).Msg("create: skipping pool, instance type mismatch")
+				continue
+			}
+			if pool.Status != "ready" {
+				log.Debug().Str("pool_id", pool.ID).Str("status", pool.Status).Msg("create: skipping pool, not ready")
+				hasTemporarySkip = true
+				continue
+			}
+			candidates = append(candidates, i)
+		}
+
+		if len(candidates) == 0 {
 			continue
 		}
-		if pool.Status != "ready" {
-			log.Debug().Str("pool_id", pool.ID).Str("status", pool.Status).Msg("create: skipping pool, not ready")
-			hasTemporarySkip = true
-			continue
-		}
-		candidates = append(candidates, i)
+
+		sort.Slice(candidates, func(a, b int) bool {
+			return pools[candidates[a]].NodeCount < pools[candidates[b]].NodeCount
+		})
+
+		return &pools[candidates[0]], nil
 	}
 
-	if len(candidates) == 0 {
-		if hasTemporarySkip {
-			return nil, errPoolsTemporarilyUnavailable
-		}
-		return nil, cloudprovider.NewInsufficientCapacityError(fmt.Errorf("no eligible pools available for instance type %s", requestedType))
+	if hasTemporarySkip {
+		return nil, errPoolsTemporarilyUnavailable
 	}
-
-	sort.Slice(candidates, func(a, b int) bool {
-		return pools[candidates[a]].NodeCount < pools[candidates[b]].NodeCount
-	})
-
-	return &pools[candidates[0]], nil
+	return nil, cloudprovider.NewInsufficientCapacityError(fmt.Errorf("no eligible pools available for instance types %v", requestedTypes))
 }
 
 func (p *CloudProvider) latestNode(ctx context.Context, poolID string, expectedCount int) (*client.WorkerNode, error) {
@@ -384,13 +399,14 @@ func instanceTypeValues(nodeClaim *karpv1.NodeClaim) []string {
 	return nil
 }
 
-// cheapestInstanceType returns the lowest-priced candidate that has a known
-// spec. It returns "" when candidates is empty (unconstrained — any pool is
-// eligible), and falls back to the first candidate when none have specs so a
-// constrained NodeClaim never widens to matching any pool.
-func cheapestInstanceType(candidates []string, specs []client.InstanceTypeSpec) string {
+// rankInstanceTypesByCost orders candidates cheapest-first. Candidates with a
+// known spec sort by price ahead of those without; unknown-spec candidates keep
+// their original relative order and trail the priced ones, so a constrained
+// NodeClaim never widens to matching any pool. Returns nil when candidates is
+// empty (unconstrained — any pool is eligible).
+func rankInstanceTypesByCost(candidates []string, specs []client.InstanceTypeSpec) []string {
 	if len(candidates) == 0 {
-		return ""
+		return nil
 	}
 
 	priceByName := make(map[string]float64, len(specs))
@@ -398,21 +414,19 @@ func cheapestInstanceType(candidates []string, specs []client.InstanceTypeSpec) 
 		priceByName[s.Name] = computePrice(s.VCPU, s.MemoryGB)
 	}
 
-	best := ""
-	var bestPrice float64
-	for _, name := range candidates {
-		price, ok := priceByName[name]
-		if !ok {
-			continue
+	ranked := append([]string(nil), candidates...)
+	sort.SliceStable(ranked, func(a, b int) bool {
+		priceA, okA := priceByName[ranked[a]]
+		priceB, okB := priceByName[ranked[b]]
+		if okA != okB {
+			return okA // priced candidates sort ahead of unknown ones
 		}
-		if best == "" || price < bestPrice {
-			best, bestPrice = name, price
+		if !okA {
+			return false // both unknown: preserve original order
 		}
-	}
-	if best == "" {
-		return candidates[0]
-	}
-	return best
+		return priceA < priceB
+	})
+	return ranked
 }
 
 func parseProviderID(providerID string) (clusterID, poolID, nodeClaimName string, err error) {

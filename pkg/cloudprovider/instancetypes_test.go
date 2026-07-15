@@ -1,6 +1,7 @@
 package cloudprovider
 
 import (
+	"reflect"
 	"testing"
 
 	"github.com/nirvana-labs/karpenter-provider-nirvana/pkg/client"
@@ -49,23 +50,22 @@ func TestPoolsToInstanceTypesSetsNonZeroPrice(t *testing.T) {
 	}
 }
 
-func TestCheapestInstanceType(t *testing.T) {
+func TestRankInstanceTypesByCost(t *testing.T) {
 	specs := []client.InstanceTypeSpec{
 		{Name: "n1-highcpu-2", VCPU: 2, MemoryGB: 4},
 		{Name: "n1-highcpu-16", VCPU: 16, MemoryGB: 32},
 	}
 
-	// Order matters: "16" sorts before "2", so returning the cheapest (not the
-	// first) is what fixes the wrong-sizing.
-	if got := cheapestInstanceType([]string{"n1-highcpu-16", "n1-highcpu-2"}, specs); got != "n1-highcpu-2" {
-		t.Errorf("expected cheapest n1-highcpu-2, got %q", got)
+	// Cheapest-first ordering: "16" is listed before "2" but must rank after it.
+	if got := rankInstanceTypesByCost([]string{"n1-highcpu-16", "n1-highcpu-2"}, specs); !reflect.DeepEqual(got, []string{"n1-highcpu-2", "n1-highcpu-16"}) {
+		t.Errorf("expected cheapest-first ordering, got %v", got)
 	}
-	if got := cheapestInstanceType(nil, specs); got != "" {
-		t.Errorf("expected empty for unconstrained, got %q", got)
+	if got := rankInstanceTypesByCost(nil, specs); got != nil {
+		t.Errorf("expected nil for unconstrained, got %v", got)
 	}
-	// Fall back to the first candidate when specs are unknown rather than
-	// widening to match any pool.
-	if got := cheapestInstanceType([]string{"unknown"}, specs); got != "unknown" {
-		t.Errorf("expected fallback to first candidate, got %q", got)
+	// Unknown-spec candidates trail priced ones rather than widening to match
+	// any pool.
+	if got := rankInstanceTypesByCost([]string{"unknown", "n1-highcpu-2"}, specs); !reflect.DeepEqual(got, []string{"n1-highcpu-2", "unknown"}) {
+		t.Errorf("expected priced candidate ahead of unknown, got %v", got)
 	}
 }
