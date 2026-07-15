@@ -76,9 +76,9 @@ func TestPoolTaintsMatch(t *testing.T) {
 	}
 }
 
-func TestSelectPoolForCreateTaintAware(t *testing.T) {
-	p := &CloudProvider{}
+func TestEligiblePoolsInCostOrderTaintAware(t *testing.T) {
 	gpuTaint := corev1.Taint{Key: "dedicated", Value: "gpu", Effect: corev1.TaintEffectNoSchedule}
+	requested := []string{"n1-highcpu-16"}
 
 	tainted := poolWithTaints("tainted", "n1-highcpu-16", []string{"dedicated=gpu:NoSchedule"})
 	untainted := poolWithTaints("untainted", "n1-highcpu-16", nil)
@@ -86,26 +86,48 @@ func TestSelectPoolForCreateTaintAware(t *testing.T) {
 
 	// A NodeClaim with no taints must land on the untainted pool, never the
 	// tainted one — even though both match the instance type.
-	got, err := p.selectPoolForCreate(pools, "n1-highcpu-16", nil)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if got.ID != "untainted" {
-		t.Errorf("expected untainted pool, got %q", got.ID)
+	ordered, _ := eligiblePoolsInCostOrder(pools, requested, nil)
+	if len(ordered) != 1 || pools[ordered[0]].ID != "untainted" {
+		t.Errorf("expected only untainted pool eligible, got %v", poolIDs(pools, ordered))
 	}
 
 	// A NodeClaim that expects the gpu taint must land on the tainted pool.
-	got, err = p.selectPoolForCreate(pools, "n1-highcpu-16", []corev1.Taint{gpuTaint})
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if got.ID != "tainted" {
-		t.Errorf("expected tainted pool, got %q", got.ID)
+	ordered, _ = eligiblePoolsInCostOrder(pools, requested, []corev1.Taint{gpuTaint})
+	if len(ordered) != 1 || pools[ordered[0]].ID != "tainted" {
+		t.Errorf("expected only tainted pool eligible, got %v", poolIDs(pools, ordered))
 	}
 
 	// If the only instance-type match carries a taint the NodeClaim doesn't
 	// expect, there is no eligible pool rather than a wrong-taint scale-up.
-	if _, err := p.selectPoolForCreate([]client.WorkerPool{tainted}, "n1-highcpu-16", nil); err == nil {
-		t.Error("expected error when no pool matches the expected taints")
+	if ordered, _ := eligiblePoolsInCostOrder([]client.WorkerPool{tainted}, requested, nil); len(ordered) != 0 {
+		t.Errorf("expected no eligible pool when taints don't match, got %v", poolIDs([]client.WorkerPool{tainted}, ordered))
 	}
+}
+
+// The cheapest allowed instance type must not hide an eligible pool of another
+// allowed type: here the cheaper n1-highcpu-2 has no ready pool, but the
+// allowed n1-highcpu-16 does, so selection must fall through to it instead of
+// returning nothing. requestedTypes is cheapest-first, so the ready pricier
+// pool is the only eligible one.
+func TestEligiblePoolsInCostOrderFallsThroughToEligibleType(t *testing.T) {
+	cheapNotReady := poolWithTaints("cheap-not-ready", "n1-highcpu-2", nil)
+	cheapNotReady.Status = "provisioning"
+	pricierReady := poolWithTaints("pricier-ready", "n1-highcpu-16", nil)
+	pools := []client.WorkerPool{cheapNotReady, pricierReady}
+
+	ordered, hasTemporarySkip := eligiblePoolsInCostOrder(pools, []string{"n1-highcpu-2", "n1-highcpu-16"}, nil)
+	if len(ordered) != 1 || pools[ordered[0]].ID != "pricier-ready" {
+		t.Errorf("expected fallthrough to pricier-ready pool, got %v", poolIDs(pools, ordered))
+	}
+	if !hasTemporarySkip {
+		t.Error("expected hasTemporarySkip=true for the not-ready cheaper pool")
+	}
+}
+
+func poolIDs(pools []client.WorkerPool, idx []int) []string {
+	ids := make([]string, 0, len(idx))
+	for _, i := range idx {
+		ids = append(ids, pools[i].ID)
+	}
+	return ids
 }
