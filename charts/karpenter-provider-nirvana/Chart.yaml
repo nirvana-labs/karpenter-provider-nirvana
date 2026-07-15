@@ -2,7 +2,7 @@ apiVersion: v2
 name: karpenter-provider-nirvana
 description: Karpenter cloud provider for Nirvana NKS clusters.
 type: application
-version: 0.14.0
+version: 0.15.0
 keywords:
   - karpenter
   - autoscaling

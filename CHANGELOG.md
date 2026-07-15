@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.15.0](https://github.com/nirvana-labs/karpenter-provider-nirvana/compare/v0.14.0...v0.15.0) (2026-07-15)
+
+
+### Features
+
+* implement pricing logic for instance types ([#56](https://github.com/nirvana-labs/karpenter-provider-nirvana/issues/56)) ([9aa6669](https://github.com/nirvana-labs/karpenter-provider-nirvana/commit/9aa6669f24d46448b84efce125c3d710daa041bc))
+* make pool scheduling taint aware ([#57](https://github.com/nirvana-labs/karpenter-provider-nirvana/issues/57)) ([1204804](https://github.com/nirvana-labs/karpenter-provider-nirvana/commit/12048048a26cd3ff155d1ba0ecc91dc57b4feed0))
+
 ## [0.14.0](https://github.com/nirvana-labs/karpenter-provider-nirvana/compare/v0.13.0...v0.14.0) (2026-05-13)
 
 
