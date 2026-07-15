@@ -41,6 +41,21 @@ func taintKey(t corev1.Taint) [3]string {
 	return [3]string{t.Key, t.Value, string(t.Effect)}
 }
 
+// formatTaints renders taints as "key=value:Effect" (or "key:Effect" when the
+// value is empty) strings, matching the Nirvana pool taint format, so log
+// output lines up with the pool taints it is compared against.
+func formatTaints(taints []corev1.Taint) []string {
+	out := make([]string, len(taints))
+	for i, t := range taints {
+		if t.Value == "" {
+			out[i] = fmt.Sprintf("%s:%s", t.Key, t.Effect)
+		} else {
+			out[i] = fmt.Sprintf("%s=%s:%s", t.Key, t.Value, t.Effect)
+		}
+	}
+	return out
+}
+
 // isHardTaint reports whether a taint actually blocks scheduling. Only
 // NoSchedule and NoExecute keep an untolerating pod off a node; PreferNoSchedule
 // is a soft preference the scheduler is free to override, so a pod can still be

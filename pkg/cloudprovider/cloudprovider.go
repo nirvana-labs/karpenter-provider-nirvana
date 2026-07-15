@@ -48,7 +48,9 @@ func (p *CloudProvider) Create(ctx context.Context, nodeClaim *karpv1.NodeClaim)
 
 	log.Info().
 		Str("nodeclaim", nodeClaim.Name).
+		Str("nodepool", nodeClaim.Labels[karpv1.NodePoolLabelKey]).
 		Strs("candidate_instance_types", candidates).
+		Strs("nodeclaim_taints", formatTaints(nodeClaim.Spec.Taints)).
 		Msg("create: received nodeclaim")
 
 	pools, err := p.nirvanaClient.ListPools(ctx, p.clusterID)
@@ -85,6 +87,8 @@ func (p *CloudProvider) Create(ctx context.Context, nodeClaim *karpv1.NodeClaim)
 		Str("pool_name", pool.Name).
 		Str("instance_type", pool.NodeConfig.InstanceType).
 		Int("current_count", pool.NodeCount).
+		Strs("pool_taints", pool.NodeConfig.Taints).
+		Strs("nodeclaim_taints", formatTaints(nodeClaim.Spec.Taints)).
 		Msg("create: selected pool")
 
 	capacity, err := capacityFromSpec(pool.NodeConfig.InstanceType, specs, pool.NodeConfig.BootVolume.Size)
@@ -339,7 +343,7 @@ func eligiblePoolsInCostOrder(pools []client.WorkerPool, requestedTypes []string
 			// would produce a node the pod can't schedule onto, which Karpenter
 			// then tears down and retries forever.
 			if !poolTaintsMatch(pool.NodeConfig.Taints, expectedTaints) {
-				log.Debug().Str("pool_id", pool.ID).Strs("pool_taints", pool.NodeConfig.Taints).Msg("create: skipping pool, taint mismatch")
+				log.Debug().Str("pool_id", pool.ID).Strs("pool_taints", pool.NodeConfig.Taints).Strs("nodeclaim_taints", formatTaints(expectedTaints)).Msg("create: skipping pool, taint mismatch")
 				continue
 			}
 			if pool.Status != "ready" {
@@ -355,6 +359,18 @@ func eligiblePoolsInCostOrder(pools []client.WorkerPool, requestedTypes []string
 		})
 		ordered = append(ordered, candidates...)
 	}
+
+	eligibleIDs := make([]string, len(ordered))
+	for j, i := range ordered {
+		eligibleIDs[j] = pools[i].ID
+	}
+	log.Info().
+		Int("pool_count", len(pools)).
+		Strs("nodeclaim_taints", formatTaints(expectedTaints)).
+		Strs("requested_instance_types", requestedTypes).
+		Strs("eligible_pools_in_order", eligibleIDs).
+		Bool("has_temporary_skip", hasTemporarySkip).
+		Msg("create: pool eligibility resolved")
 
 	return ordered, hasTemporarySkip
 }
