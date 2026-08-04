@@ -49,9 +49,21 @@ func PoolsToInstanceTypes(pools []client.WorkerPool, instanceTypeSpecs map[strin
 
 		it := &cloudprovider.InstanceType{
 			Name: name,
+			// Karpenter's InstanceType contract requires instance type, zone, capacity
+			// type, and architecture to be declared here. The instance type entry is
+			// load-bearing: core filters instance types with Requirements.Intersects,
+			// which only compares keys present on both sides, so omitting the key makes
+			// every instance type compatible with every NodePool. Core then overwrites
+			// the NodeClaim's instance-type requirement with the full surviving list in
+			// NodeClaimTemplate.ToNodeClaim, discarding the constraint the NodePool (and
+			// any pod nodeSelector) asked for, and Create() scales whichever pool is
+			// cheapest instead of the one the pod needs.
 			Requirements: scheduling.NewRequirements(
+				scheduling.NewRequirement(corev1.LabelInstanceTypeStable, corev1.NodeSelectorOpIn, name),
 				scheduling.NewRequirement(corev1.LabelArchStable, corev1.NodeSelectorOpIn, "amd64"),
 				scheduling.NewRequirement(corev1.LabelOSStable, corev1.NodeSelectorOpIn, "linux"),
+				scheduling.NewRequirement(corev1.LabelTopologyZone, corev1.NodeSelectorOpIn, region),
+				scheduling.NewRequirement(karpv1.CapacityTypeLabelKey, corev1.NodeSelectorOpIn, karpv1.CapacityTypeOnDemand),
 			),
 			Capacity: corev1.ResourceList{
 				corev1.ResourceCPU:              resource.MustParse(fmt.Sprintf("%d", spec.VCPU)),
