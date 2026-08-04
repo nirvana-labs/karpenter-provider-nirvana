@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.15.1](https://github.com/nirvana-labs/karpenter-provider-nirvana/compare/v0.15.0...v0.15.1) (2026-08-04)
+
+
+### Bug Fixes
+
+* declare instance type, zone, and capacity type on InstanceTypes ([#60](https://github.com/nirvana-labs/karpenter-provider-nirvana/issues/60)) ([972efef](https://github.com/nirvana-labs/karpenter-provider-nirvana/commit/972efefbeae987e35f763da8c05f728f193bb351))
+
 ## [0.15.0](https://github.com/nirvana-labs/karpenter-provider-nirvana/compare/v0.14.0...v0.15.0) (2026-07-15)
 
 
