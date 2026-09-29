@@ -39,6 +39,13 @@ rules:
   - apiGroups: [""]
     resources: ["pods/eviction"]
     verbs: ["create"]
+  # Once a node's terminationGracePeriod elapses, Karpenter deletes the
+  # remaining pods directly (bypassing PDBs and do-not-disrupt) instead of
+  # evicting them. Without this, drain retries forever and the NodeClaim never
+  # terminates.
+  - apiGroups: [""]
+    resources: ["pods"]
+    verbs: ["delete"]
 
   # Event emission
   - apiGroups: [""]
